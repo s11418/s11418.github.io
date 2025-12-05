@@ -6,169 +6,177 @@
   </head>
   <body>
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>懸疑偵探互動遊戲</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>統一畫風懸案遊戲</title>
 <style>
-body { margin:0; padding:0; font-family:"Microsoft JhengHei",sans-serif; background:black; color:white; text-align:center; }
-#bg { width:100%; height:50vh; background-size:cover; background-position:center; margin-bottom:20px; transition: opacity 1s; }
-#text { font-size:20px; padding:10px 20px; line-height:1.6; }
-.choice-btn, .item-btn { background:#222; border:1px solid #555; color:white; padding:10px 20px; margin:8px; cursor:pointer; border-radius:6px; font-size:18px; }
-.choice-btn:hover, .item-btn:hover { background:#444; }
-#items img { width:150px; margin:10px; cursor:pointer; border:2px solid #555; border-radius:6px; }
-#modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); justify-content:center; align-items:center; }
-#modal img { max-width:90%; max-height:90%; border:2px solid white; border-radius:6px; }
-#ending { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; color:red; font-size:50px; justify-content:center; align-items:center; flex-direction:column; }
-#ending img { width:200px; opacity:0; transition:opacity 2s; margin-top:20px; }
-#restartBtn { margin-top:20px; font-size:24px; padding:10px 20px; cursor:pointer; }
+body {margin:0; font-family:Arial,sans-serif; background:black; color:white; overflow:hidden;}
+#game-container {
+  position:relative; width:100%; height:100vh;
+  background-size:cover; background-position:center;
+  transition: background-image 1s ease-in-out;
+}
+.interactive {position:absolute; cursor:pointer; transition: transform 0.2s;}
+.interactive:hover {transform: scale(1.1);}
+
+/* 文字淡入 */
+#clue-text {
+  position:absolute; bottom:20px; left:50%; transform:translateX(-50%);
+  background:rgba(0,0,0,0.6); padding:15px; border-radius:10px;
+  max-width:70%; display:none; text-align:left; font-size:18px;
+  opacity:0; transition: opacity 1s;
+}
+
+/* 報紙翻頁動畫 */
+.paper-container { perspective: 1000px; position:absolute; }
+.paper-flip {
+  width:100px; transform-origin:left center;
+  transition: transform 1s ease, box-shadow 1s ease;
+  box-shadow:0 5px 15px rgba(0,0,0,0.3);
+}
+.paper-flip.flipped { transform: rotateY(180deg); box-shadow:0 10px 20px rgba(0,0,0,0.5); }
+
+/* 血跡文字動畫 */
+.blood-text {
+  color:red; font-size:50px; text-align:center; margin-top:0;
+  position:absolute; top:-100px; left:50%; transform:translateX(-50%);
+  animation:dropBlood 4s forwards;
+}
+@keyframes dropBlood {
+  0% {top:-100px; opacity:0;}
+  50% {top:50%; opacity:0.6;}
+  100% {top:50%; opacity:1;}
+}
 </style>
 </head>
 <body>
+<div id="game-container"></div>
+<div id="clue-text"></div>
 
-<!-- 背景音樂 -->
-<audio id="bgm" autoplay loop>
-  <source src="https://cdn.pixabay.com/download/audio/2021/09/29/audio_8e3a8d6e1c.mp3?filename=dark-ambient-11219.mp3" type="audio/mpeg">
-</audio>
-
-<!-- 音效 -->
-<audio id="phoneSound"><source src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_e7c7fcd8b6.mp3?filename=phone-ring-6050.mp3" type="audio/mpeg"></audio>
-<audio id="paperSound"><source src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_c5d7e5c79b.mp3?filename=paper-flip-6051.mp3" type="audio/mpeg"></audio>
-<audio id="doorSound"><source src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_9a2bcb1e4a.mp3?filename=door-open-6052.mp3" type="audio/mpeg"></audio>
-<audio id="writeSound"><source src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_d3b9a9f1b3.mp3?filename=writing-6053.mp3" type="audio/mpeg"></audio>
-<audio id="clickSound"><source src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_02e2eabc8b.mp3?filename=ui-click-6054.mp3" type="audio/mpeg"></audio>
-
-<div id="bg"></div>
-<div id="text"></div>
-<div id="items"></div>
-<div id="choices"></div>
-
-<!-- 放大圖片模態 -->
-<div id="modal" onclick="this.style.display='none'"><img id="modalImg"></div>
-
-<!-- 結局 -->
-<div id="ending">
-  <div id="endingText"></div>
-  <img id="bloodImg" src="https://images.unsplash.com/photo-1565519821194-6d9baf1aee5a">
-  <button id="restartBtn">重新開始</button>
-</div>
+<audio id="sound-newspaper" src="sounds/newspaper.mp3"></audio>
+<audio id="sound-folder" src="sounds/folder.mp3"></audio>
+<audio id="sound-bottle" src="sounds/bottle.mp3"></audio>
+<audio id="sound-letter" src="sounds/letter.mp3"></audio>
 
 <script>
-const scenes = {
-  start:{
-    img:"https://images.unsplash.com/photo-1509021436665-8f07dbf5bf1d",
-    text:"你的辦公室深夜，一通電話打進來，桌上有報紙、信件、筆記與門。",
-    items:[
-      {text:"📞 電話", img:null, sound:"phoneSound", info:"有人報案！"},
-      {text:"📰 報紙", img:"https://images.unsplash.com/photo-1573497491208-6b1acb260507", sound:"paperSound", info:"報紙頭條：神秘失蹤案"},
-      {text:"✉️ 信件", img:"https://images.unsplash.com/photo-1580910051070-f99b0a914c15", sound:"paperSound", info:"信件寫著：『你越接近真相，越危險』"},
-      {text:"🚪 門", img:"https://images.unsplash.com/photo-1598365572954-99e4a476e6a2", sound:"doorSound", info:"門悄悄打開，陰影閃過..."},
-      {text:"📓 筆記", img:"https://images.unsplash.com/photo-1506880018606-1cb7d6c15d77", sound:"writeSound", info:"筆記上寫著破碎的記憶與線索"}
-    ],
-    choices:[{text:"出去調查", next:"alley"}]
-  },
-  alley:{
-    img:"https://images.unsplash.com/photo-1486184842419-447224e5ba44",
-    text:"你來到案發巷子，四周靜悄悄。",
-    choices:[
-      {text:"追影子", next:"hospital"},
-      {text:"回辦公室", next:"start"}
-    ]
-  },
-  hospital:{
-    img:"https://images.unsplash.com/photo-1530018607912-eff2daa1bac7",
-    text:"你猛然醒來，發現自己在精神病院，戴著手環。原來，你一直在這裡。",
-    choices:[
-      {text:"接受真相", next:null, action:()=>showEnding("hospital")},
-      {text:"否認真相", next:null, action:()=>showEnding("hospital")}
-    ]
-  },
-  success:{ // 偵探成功結局示意
-    img:"https://images.unsplash.com/photo-1516035069371-29a1c179c5f4",
-    text:"你完成了調查，所有線索指向正確方向。",
-    choices:[
-      {text:"結束調查", next:null, action:()=>showEnding("success")}
-    ]
-  }
+const container = document.getElementById('game-container');
+const clueText = document.getElementById('clue-text');
+const sounds = {
+  newspaper: document.getElementById('sound-newspaper'),
+  folder: document.getElementById('sound-folder'),
+  bottle: document.getElementById('sound-bottle'),
+  letter: document.getElementById('sound-letter')
 };
 
-const endings = {
-  hospital:{ text:"THE END", blood:true },
-  success:{ text:"你真的調查出真相了嗎？", blood:false }
-};
+let sceneIndex = 0;
+const scenes = [
+  { background: 'images/bg_office.png', objects: [
+      {src:'images/newspaper.png', bottom:'100px', left:'50%', text:'你發現一篇報導，提到受害人收到神秘信件…', next:1, sound:'newspaper'}
+  ]},
+  { background: 'images/bg_house.png', objects: [
+      {src:'images/folder.png', bottom:'80px', left:'40%', text:'你找到一份文件夾，上面寫著「秘密」字樣。', next:2, sound:'folder'},
+      {src:'images/bottle.png', bottom:'80px', left:'60%', text:'桌上有打翻的藥瓶，裡面有筆記。', next:2, sound:'bottle'}
+  ]},
+  { background: 'images/bg_hallway.png', objects: [
+      {src:'images/letter.png', bottom:'50px', left:'45%', text:'你在牆角找到一封信，提到精神病院的事情…', next:null, sound:'letter'}
+  ]}
+];
 
-function showEnding(type){
-  const endingDiv=document.getElementById("ending");
-  const endingText=document.getElementById("endingText");
-  const bloodImg=document.getElementById("bloodImg");
-  endingDiv.style.display="flex";
-
-  endingText.innerText=endings[type].text;
-  if(endings[type].blood) bloodImg.style.opacity=1;
-  else bloodImg.style.opacity=0;
-
-  document.getElementById("restartBtn").onclick=()=>{
-    endingDiv.style.display="none";
-    show(scenes.start);
-  };
+function clearContainer(){
+  container.innerHTML = '';
+  clueText.style.opacity = 0;
+  clueText.style.display = 'none';
+  container.appendChild(clueText);
 }
 
-function show(scene){
-  const bgDiv=document.getElementById("bg");
-  bgDiv.style.opacity=0;
-  setTimeout(()=>{ bgDiv.style.backgroundImage=`url('${scene.img}')`; bgDiv.style.opacity=1; },300);
-  document.getElementById("text").innerText=scene.text;
+function createInteractiveItem(obj){
+  const item = document.createElement('img');
+  item.src = obj.src;
+  item.classList.add('interactive');
 
-  // 物品互動
-  const itemDiv=document.getElementById("items");
-  itemDiv.innerHTML="";
-  if(scene.items){
-    scene.items.forEach(it=>{
-      const btn=document.createElement("button");
-      btn.className="item-btn";
-      btn.innerText=it.text;
-      btn.onclick=()=>{
-        if(it.sound) document.getElementById(it.sound).play();
-        if(it.img){
-          document.getElementById("modalImg").src=it.img;
-          document.getElementById("modal").style.display="flex";
-        }
-        alert(it.info);
-      };
-      itemDiv.appendChild(btn);
+  if(obj.sound==='newspaper'){
+    const containerDiv = document.createElement('div');
+    containerDiv.classList.add('paper-container');
+    containerDiv.style.bottom = obj.bottom;
+    containerDiv.style.left = obj.left;
+    item.classList.add('paper-flip');
+    containerDiv.appendChild(item);
+    containerDiv.addEventListener('click', ()=>{
+      sounds[obj.sound].play();
+      item.classList.add('flipped');
+      clueText.style.display='block';
+      clueText.style.opacity=0;
+      clueText.innerText=obj.text;
+      setTimeout(()=>{ clueText.style.opacity=1; },1000);
+      setTimeout(()=>{ if(obj.next!==null) loadScene(obj.next); else showEndingOptions(); },1500);
     });
-  }
-
-  // 選項按鈕
-  const choiceDiv=document.getElementById("choices");
-  choiceDiv.innerHTML="";
-  if(scene.choices){
-    scene.choices.forEach(c=>{
-      const btn=document.createElement("button");
-      btn.className="choice-btn";
-      btn.innerText=c.text;
-      btn.onclick=()=>{
-        document.getElementById("clickSound").play();
-        if(c.action) c.action();
-        else show(scenes[c.next]);
-      };
-      choiceDiv.appendChild(btn);
+    container.appendChild(containerDiv);
+  } else {
+    item.style.bottom=obj.bottom;
+    item.style.left=obj.left;
+    item.addEventListener('click', ()=>{
+      sounds[obj.sound].play();
+      clueText.style.display='block';
+      clueText.style.opacity=0;
+      clueText.innerText=obj.text;
+      setTimeout(()=>{ clueText.style.opacity=1; },50);
+      setTimeout(()=>{ if(obj.next!==null) loadScene(obj.next); else showEndingOptions(); },1500);
     });
+    container.appendChild(item);
   }
+}
 
-  // 精神病院背景音樂切換
-  if(scene===scenes.hospital){
-    const bgm=document.getElementById("bgm");
-    bgm.src="https://cdn.pixabay.com/download/audio/2021/10/07/audio_dfc7f1f0cd.mp3?filename=dark-horror-ambient-11225.mp3";
-    bgm.play();
+function loadScene(index){
+  sceneIndex=index;
+  clearContainer();
+  container.style.backgroundImage=`url('${scenes[index].background}')`;
+  scenes[index].objects.forEach(obj=>createInteractiveItem(obj));
+}
+
+function showEndingOptions(){
+  clueText.style.display='block';
+  clueText.style.opacity=1;
+  clueText.innerHTML='你想追查哪條線索？<br>'+
+    '<span style="cursor:pointer;text-decoration:underline;" onclick="loadEnding(true)">精神病院線索</span> | '+
+    '<span style="cursor:pointer;text-decoration:underline;" onclick="loadEnding(false)">揭開真相</span>';
+}
+
+function loadEnding(isHospital){
+  clearContainer();
+  container.style.backgroundImage='url(images/bg_hallway.png)';
+  if(isHospital){
+    const endText=document.createElement('div');
+    endText.classList.add('blood-text');
+    endText.innerText='THE END';
+    container.appendChild(endText);
+  } else {
+    const endText=document.createElement('div');
+    endText.innerText='你真的調查出真相了嗎？\n回到首頁重新開始';
+    endText.style.position='absolute';
+    endText.style.top='50%';
+    endText.style.left='50%';
+    endText.style.transform='translate(-50%,-50%)';
+    endText.style.whiteSpace='pre-line';
+    container.appendChild(endText);
+    const restartBtn=document.createElement('div');
+    restartBtn.innerText='回到首頁';
+    restartBtn.style.cursor='pointer';
+    restartBtn.style.marginTop='20px';
+    restartBtn.style.fontSize='20px';
+    restartBtn.style.textDecoration='underline';
+    restartBtn.onclick=()=>loadScene(0);
+    container.appendChild(restartBtn);
   }
 }
 
 // 開始遊戲
-show(scenes.start);
+loadScene(0);
 </script>
-
 </body>
+</html>
+
 </html>
 
 

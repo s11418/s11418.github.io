@@ -5,177 +5,34 @@
     <link rel="icon"href="icon.png.png">
   </head>
   <body>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>懸案互動遊戲示範</title>
-<style>
-body { margin:0; font-family:Arial,sans-serif; background:black; color:white; overflow:hidden;}
-#game-container {
-  position:relative; width:100%; height:100vh;
-  background-size:cover; background-position:center;
-  transition: background-image 1s ease-in-out;
-}
-.interactive {position:absolute; cursor:pointer; transition: transform 0.2s;}
-.interactive:hover {transform: scale(1.1);}
+#include <stdio.h>
 
-/* 文字淡入 */
-#clue-text {
-  position:absolute; bottom:20px; left:50%; transform:translateX(-50%);
-  background:rgba(0,0,0,0.6); padding:15px; border-radius:10px;
-  max-width:70%; display:none; text-align:left; font-size:18px;
-  opacity:0; transition: opacity 1s;
-}
+int main() {
+    int choice;
 
-/* 報紙翻頁動畫 */
-.paper-container { perspective: 1000px; position:absolute; }
-.paper-flip {
-  width:120px; transform-origin:left center;
-  transition: transform 1s ease, box-shadow 1s ease;
-  box-shadow:0 5px 15px rgba(0,0,0,0.3);
-}
-.paper-flip.flipped { transform: rotateY(180deg); box-shadow:0 10px 20px rgba(0,0,0,0.5); }
+    printf("你是蘇晚青，夜晚回家時遇到持刀的劉承浩。\n");
+    printf("他逼近你，你感到害怕。\n");
 
-/* 血跡文字動畫 */
-.blood-text {
-  color:red; font-size:50px; text-align:center; margin-top:0;
-  position:absolute; top:-100px; left:50%; transform:translateX(-50%);
-  animation:dropBlood 4s forwards;
-}
-@keyframes dropBlood {
-  0% {top:-100px; opacity:0;}
-  50% {top:50%; opacity:0.6;}
-  100% {top:50%; opacity:1;}
-}
-</style>
-</head>
-<body>
-<div id="game-container"></div>
-<div id="clue-text"></div>
+    printf("\n你要怎麼做？\n");
+    printf("1. 請求他不要傷害你\n");
+    printf("2. 嘗試逃跑\n");
+    printf("請輸入選項 (1或2)：");
+    scanf("%d", &choice);
 
-<audio id="sound-newspaper" src="https://opengameart.org/sites/default/files/Newspaper.mp3"></audio>
-<audio id="sound-folder" src="https://opengameart.org/sites/default/files/Folder.mp3"></audio>
-<audio id="sound-bottle" src="https://opengameart.org/sites/default/files/Bottle.mp3"></audio>
-<audio id="sound-letter" src="https://opengameart.org/sites/default/files/Letter.mp3"></audio>
+    if(choice == 1){
+        printf("\n你顫抖地說：『我真的不想惹麻煩，也不要傷害我…』\n");
+        printf("你的話讓劉承浩想起女兒生前說的話：\n");
+        printf("『爸爸，你是我的英雄！』\n");
+        printf("他手慢慢放下，怒火逐漸消散……\n");
+    } else {
+        printf("\n你嘗試逃跑，但他追上來了，你只能再次面對他……\n");
+    }
 
-<script>
-const container = document.getElementById('game-container');
-const clueText = document.getElementById('clue-text');
-const sounds = {
-  newspaper: document.getElementById('sound-newspaper'),
-  folder: document.getElementById('sound-folder'),
-  bottle: document.getElementById('sound-bottle'),
-  letter: document.getElementById('sound-letter')
-};
+    printf("\n故事結局開放式：誰會揭發真相，誰會保留秘密，仍留給讀者想像。\n");
 
-let sceneIndex = 0;
-const scenes = [
-  { background: 'https://opengameart.org/sites/default/files/bg_office.png', objects: [
-      {src:'https://opengameart.org/sites/default/files/newspaper.png', bottom:'100px', left:'50%', text:'你發現一篇報導，提到受害人收到神秘信件…', next:1, sound:'newspaper'}
-  ]},
-  { background: 'https://opengameart.org/sites/default/files/bg_house.png', objects: [
-      {src:'https://opengameart.org/sites/default/files/folder.png', bottom:'80px', left:'40%', text:'你找到一份文件夾，上面寫著「秘密」字樣。', next:2, sound:'folder'},
-      {src:'https://opengameart.org/sites/default/files/bottle.png', bottom:'80px', left:'60%', text:'桌上有打翻的藥瓶，裡面有筆記。', next:2, sound:'bottle'}
-  ]},
-  { background: 'https://opengameart.org/sites/default/files/bg_hallway.png', objects: [
-      {src:'https://opengameart.org/sites/default/files/letter.png', bottom:'50px', left:'45%', text:'你在牆角找到一封信，提到精神病院的事情…', next:null, sound:'letter'}
-  ]}
-];
-
-function clearContainer(){
-  container.innerHTML = '';
-  clueText.style.opacity = 0;
-  clueText.style.display = 'none';
-  container.appendChild(clueText);
+    return 0;
 }
 
-function createInteractiveItem(obj){
-  const item = document.createElement('img');
-  item.src = obj.src;
-  item.classList.add('interactive');
-
-  if(obj.sound==='newspaper'){
-    const containerDiv = document.createElement('div');
-    containerDiv.classList.add('paper-container');
-    containerDiv.style.bottom = obj.bottom;
-    containerDiv.style.left = obj.left;
-    item.classList.add('paper-flip');
-    containerDiv.appendChild(item);
-    containerDiv.addEventListener('click', ()=>{
-      sounds[obj.sound].play();
-      item.classList.add('flipped');
-      clueText.style.display='block';
-      clueText.style.opacity=0;
-      clueText.innerText=obj.text;
-      setTimeout(()=>{ clueText.style.opacity=1; },1000);
-      setTimeout(()=>{ if(obj.next!==null) loadScene(obj.next); else showEndingOptions(); },1500);
-    });
-    container.appendChild(containerDiv);
-  } else {
-    item.style.bottom=obj.bottom;
-    item.style.left=obj.left;
-    item.addEventListener('click', ()=>{
-      sounds[obj.sound].play();
-      clueText.style.display='block';
-      clueText.style.opacity=0;
-      clueText.innerText=obj.text;
-      setTimeout(()=>{ clueText.style.opacity=1; },50);
-      setTimeout(()=>{ if(obj.next!==null) loadScene(obj.next); else showEndingOptions(); },1500);
-    });
-    container.appendChild(item);
-  }
-}
-
-function loadScene(index){
-  sceneIndex=index;
-  clearContainer();
-  container.style.backgroundImage=`url('${scenes[index].background}')`;
-  scenes[index].objects.forEach(obj=>createInteractiveItem(obj));
-}
-
-function showEndingOptions(){
-  clueText.style.display='block';
-  clueText.style.opacity=1;
-  clueText.innerHTML='你想追查哪條線索？<br>'+
-    '<span style="cursor:pointer;text-decoration:underline;" onclick="loadEnding(true)">精神病院線索</span> | '+
-    '<span style="cursor:pointer;text-decoration:underline;" onclick="loadEnding(false)">揭開真相</span>';
-}
-
-function loadEnding(isHospital){
-  clearContainer();
-  container.style.backgroundImage='url(https://opengameart.org/sites/default/files/bg_hallway.png)';
-  if(isHospital){
-    const endText=document.createElement('div');
-    endText.classList.add('blood-text');
-    endText.innerText='THE END';
-    container.appendChild(endText);
-  } else {
-    const endText=document.createElement('div');
-    endText.innerText='你真的調查出真相了嗎？\n回到首頁重新開始';
-    endText.style.position='absolute';
-    endText.style.top='50%';
-    endText.style.left='50%';
-    endText.style.transform='translate(-50%,-50%)';
-    endText.style.whiteSpace='pre-line';
-    container.appendChild(endText);
-    const restartBtn=document.createElement('div');
-    restartBtn.innerText='回到首頁';
-    restartBtn.style.cursor='pointer';
-    restartBtn.style.marginTop='20px';
-    restartBtn.style.fontSize='20px';
-    restartBtn.style.textDecoration='underline';
-    restartBtn.onclick=()=>loadScene(0);
-    container.appendChild(restartBtn);
-  }
-}
-
-// 開始遊戲
-loadScene(0);
-</script>
-</body>
-</html>
 
 
 </html>

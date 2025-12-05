@@ -5,34 +5,32 @@
     <link rel="icon"href="icon.png.png">
   </head>
   <body>
-    <!DOCTYPE html>
+   <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<title>Detective Mystery</title>
+<title>偵探懸疑遊戲</title>
 <style>
   body {
-    background-color: black;
-    color: white;
-    font-family: "Microsoft JhengHei", sans-serif;
     margin: 0;
     padding: 0;
+    font-family: "Microsoft JhengHei", sans-serif;
+    color: white;
+    background-color: black;
     text-align: center;
   }
-
   #bg {
     width: 100%;
-    height: 55vh;
+    height: 50vh;
     background-size: cover;
     background-position: center;
+    margin-bottom: 20px;
   }
-
   #text {
-    padding: 20px;
     font-size: 20px;
+    padding: 10px 20px;
     line-height: 1.6;
   }
-
   .choice-btn {
     background: #222;
     border: 1px solid #555;
@@ -43,90 +41,122 @@
     border-radius: 6px;
     font-size: 18px;
   }
-
   .choice-btn:hover {
     background: #444;
+  }
+  .item-btn {
+    background: #444;
+    border: 1px solid #666;
+    color: #fff;
+    padding: 5px 10px;
+    margin: 5px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 16px;
+  }
+  .item-btn:hover {
+    background: #666;
   }
 </style>
 </head>
 <body>
 
+<!-- 背景音樂 -->
+<audio id="bgm" autoplay loop>
+  <source src="https://cdn.pixabay.com/download/audio/2021/09/29/audio_8e3a8d6e1c.mp3?filename=dark-ambient-11219.mp3" type="audio/mpeg">
+</audio>
+
 <div id="bg"></div>
 <div id="text"></div>
+<div id="items"></div>
 <div id="choices"></div>
 
 <script>
-  const scenes = {
-    start: {
-      img: "https://cdn.pixabay.com/photo/2015/05/31/10/55/desk-791733_1280.jpg",
-      text: "你是一名偵探。你在深夜回到自己的辦公室，一宗神秘的失蹤案等著你調查。你感到一股莫名的壓迫感……",
-      choices: [
-        { text: "查看桌上的資料", next: "file" },
-        { text: "離開辦公室透透氣", next: "alley" }
-      ]
-    },
+// 場景設定
+const scenes = {
+  start: {
+    img: "https://images.unsplash.com/photo-1509021436665-8f07dbf5bf1d",
+    text: "深夜，辦公室。你收到一通神秘來電，報案人說有失蹤案件需要你調查。",
+    choices: [
+      { text: "接電話", next: "file" },
+      { text: "忽略電話", next: "alley" }
+    ]
+  },
+  file: {
+    img: "https://images.unsplash.com/photo-1505843513577-22bb7d21e455",
+    text: "你走向桌上的資料，桌上有報紙、信件和照片。",
+    items: [
+      { text: "查看報紙", info: "頭條：『神秘失蹤案震驚城市』" },
+      { text: "打開信件", info: "信封內寫著：『你越接近真相，越危險』" },
+      { text: "看照片", info: "照片中有一個模糊的人影，輪廓像你自己" }
+    ],
+    choices: [
+      { text: "去案發地調查", next: "alley" },
+      { text: "繼續整理桌上線索", next: "file2" }
+    ]
+  },
+  file2: {
+    img: "https://images.unsplash.com/photo-1505843513577-22bb7d21e455",
+    text: "你整理桌上的資料，腦中閃過一些記憶片段……",
+    choices: [
+      { text: "回想更多", next: "hospital" },
+      { text: "先去外面調查", next: "alley" }
+    ]
+  },
+  alley: {
+    img: "https://images.unsplash.com/photo-1486184842419-447224e5ba44",
+    text: "你來到案發巷子，夜色濃厚，周圍異常安靜。",
+    choices: [
+      { text: "仔細觀察四周", next: "shadow" },
+      { text: "回辦公室", next: "file" }
+    ]
+  },
+  shadow: {
+    img: "https://images.unsplash.com/photo-1505843513577-22bb7d21e455",
+    text: "你看到一個影子閃過，輪廓竟和你自己很像。",
+    choices: [
+      { text: "追影子", next: "hospital" },
+      { text: "回辦公室研究資料", next: "file" }
+    ]
+  },
+  hospital: {
+    img: "https://images.unsplash.com/photo-1530018607912-eff2daa1bac7",
+    text: "你猛然醒來，發現自己在醫院，戴著病患手環。原來，你一直在這裡。",
+    choices: [
+      { text: "接受真相", next: "end" },
+      { text: "否認一切", next: "end" }
+    ]
+  },
+  end: {
+    img: "https://images.unsplash.com/photo-1530018607912-eff2daa1bac7",
+    text: "這場調查全是你腦中的投射。你不是偵探，只是在醫院努力拼湊破碎的記憶。",
+    choices: [
+      { text: "重新開始", next: "start" }
+    ]
+  }
+};
 
-    file: {
-      img: "https://cdn.pixabay.com/photo/2016/03/27/19/08/office-1284421_1280.jpg",
-      text: "你翻開了失蹤案的調查資料，其中有一張讓你覺得眼熟的照片……像是在哪裡看過。",
-      choices: [
-        { text: "繼續翻閱資料", next: "memory" },
-        { text: "出去調查現場", next: "alley" }
-      ]
-    },
+function show(scene) {
+  document.getElementById("bg").style.backgroundImage = `url('${scene.img}')`;
+  document.getElementById("text").innerText = scene.text;
 
-    alley: {
-      img: "https://cdn.pixabay.com/photo/2015/09/05/21/51/alley-925859_1280.jpg",
-      text: "你來到失蹤者最後出現的巷子。夜色濃厚，四周靜得異常。",
-      choices: [
-        { text: "仔細觀察周圍", next: "shadow" },
-        { text: "返回辦公室", next: "file" }
-      ]
-    },
+  // 處理物品互動
+  const itemDiv = document.getElementById("items");
+  itemDiv.innerHTML = "";
+  if(scene.items){
+    scene.items.forEach(it => {
+      const btn = document.createElement("button");
+      btn.className = "item-btn";
+      btn.innerText = it.text;
+      btn.onclick = () => alert(it.info);
+      itemDiv.appendChild(btn);
+    });
+  }
 
-    shadow: {
-      img: "https://cdn.pixabay.com/photo/2017/01/18/15/10/corridor-1993645_1280.jpg",
-      text: "你彷彿看到一個影子從巷子的另一端閃過。那姿態、那輪廓……好像和你自己很像。",
-      choices: [
-        { text: "追上去", next: "hospital" },
-        { text: "不理會，回去研究資料", next: "file" }
-      ]
-    },
-
-    memory: {
-      img: "https://cdn.pixabay.com/photo/2015/05/31/10/55/desk-791733_1280.jpg",
-      text: "你腦中突然閃過一些畫面……你似乎也曾經出現在案發現場。那些記憶好像……被你自己封鎖了。",
-      choices: [
-        { text: "試著回想更多", next: "hospital" },
-        { text: "停止回想", next: "alley" }
-      ]
-    },
-
-    hospital: {
-      img: "https://cdn.pixabay.com/photo/2020/05/06/15/26/hallway-5148454_1280.jpg",
-      text: "你猛然睜開眼。眼前不是巷子，也不是辦公室，而是……一間昏暗的醫院走廊。你戴著病患手環。原來，你一直都在這裡。",
-      choices: [
-        { text: "接受真相", next: "end" },
-        { text: "否認一切", next: "end" }
-      ]
-    },
-
-    end: {
-      img: "https://cdn.pixabay.com/photo/2020/05/06/15/26/hallway-5148454_1280.jpg",
-      text: "你終於意識到——這場調查從頭到尾都是你自己腦中的投射。你不是偵探，也沒有在調查任何人。你只是一直待在醫院，努力拼湊已經破碎的記憶。",
-      choices: [
-        { text: "重新開始", next: "start" }
-      ]
-    }
-  };
-
-  function show(scene) {
-    document.getElementById("bg").style.backgroundImage = `url('${scene.img}')`;
-    document.getElementById("text").innerText = scene.text;
-
-    const choiceDiv = document.getElementById("choices");
-    choiceDiv.innerHTML = "";
-
+  // 處理選項
+  const choiceDiv = document.getElementById("choices");
+  choiceDiv.innerHTML = "";
+  if(scene.choices){
     scene.choices.forEach(c => {
       const btn = document.createElement("button");
       btn.className = "choice-btn";
@@ -135,12 +165,15 @@
       choiceDiv.appendChild(btn);
     });
   }
+}
 
-  show(scenes.start);
+// 啟動遊戲
+show(scenes.start);
 </script>
 
 </body>
 </html>
 
-  </body>
- </html>
+</script>
+
+

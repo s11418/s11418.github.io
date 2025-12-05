@@ -5,58 +5,23 @@
     <link rel="icon"href="icon.png.png">
   </head>
   <body>
-   <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<title>偵探懸疑遊戲</title>
+<title>懸疑偵探互動遊戲</title>
 <style>
-  body {
-    margin: 0;
-    padding: 0;
-    font-family: "Microsoft JhengHei", sans-serif;
-    color: white;
-    background-color: black;
-    text-align: center;
-  }
-  #bg {
-    width: 100%;
-    height: 50vh;
-    background-size: cover;
-    background-position: center;
-    margin-bottom: 20px;
-  }
-  #text {
-    font-size: 20px;
-    padding: 10px 20px;
-    line-height: 1.6;
-  }
-  .choice-btn {
-    background: #222;
-    border: 1px solid #555;
-    color: white;
-    padding: 10px 20px;
-    margin: 8px;
-    cursor: pointer;
-    border-radius: 6px;
-    font-size: 18px;
-  }
-  .choice-btn:hover {
-    background: #444;
-  }
-  .item-btn {
-    background: #444;
-    border: 1px solid #666;
-    color: #fff;
-    padding: 5px 10px;
-    margin: 5px;
-    cursor: pointer;
-    border-radius: 4px;
-    font-size: 16px;
-  }
-  .item-btn:hover {
-    background: #666;
-  }
+body { margin:0; padding:0; font-family:"Microsoft JhengHei",sans-serif; background:black; color:white; text-align:center; }
+#bg { width:100%; height:50vh; background-size:cover; background-position:center; margin-bottom:20px; transition: opacity 1s; }
+#text { font-size:20px; padding:10px 20px; line-height:1.6; }
+.choice-btn, .item-btn { background:#222; border:1px solid #555; color:white; padding:10px 20px; margin:8px; cursor:pointer; border-radius:6px; font-size:18px; }
+.choice-btn:hover, .item-btn:hover { background:#444; }
+#items img { width:150px; margin:10px; cursor:pointer; border:2px solid #555; border-radius:6px; }
+#modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); justify-content:center; align-items:center; }
+#modal img { max-width:90%; max-height:90%; border:2px solid white; border-radius:6px; }
+#ending { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:black; color:red; font-size:50px; justify-content:center; align-items:center; flex-direction:column; }
+#ending img { width:200px; opacity:0; transition:opacity 2s; margin-top:20px; }
+#restartBtn { margin-top:20px; font-size:24px; padding:10px 20px; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -66,113 +31,146 @@
   <source src="https://cdn.pixabay.com/download/audio/2021/09/29/audio_8e3a8d6e1c.mp3?filename=dark-ambient-11219.mp3" type="audio/mpeg">
 </audio>
 
+<!-- 音效 -->
+<audio id="phoneSound"><source src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_e7c7fcd8b6.mp3?filename=phone-ring-6050.mp3" type="audio/mpeg"></audio>
+<audio id="paperSound"><source src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_c5d7e5c79b.mp3?filename=paper-flip-6051.mp3" type="audio/mpeg"></audio>
+<audio id="doorSound"><source src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_9a2bcb1e4a.mp3?filename=door-open-6052.mp3" type="audio/mpeg"></audio>
+<audio id="writeSound"><source src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_d3b9a9f1b3.mp3?filename=writing-6053.mp3" type="audio/mpeg"></audio>
+<audio id="clickSound"><source src="https://cdn.pixabay.com/download/audio/2022/03/15/audio_02e2eabc8b.mp3?filename=ui-click-6054.mp3" type="audio/mpeg"></audio>
+
 <div id="bg"></div>
 <div id="text"></div>
 <div id="items"></div>
 <div id="choices"></div>
 
+<!-- 放大圖片模態 -->
+<div id="modal" onclick="this.style.display='none'"><img id="modalImg"></div>
+
+<!-- 結局 -->
+<div id="ending">
+  <div id="endingText"></div>
+  <img id="bloodImg" src="https://images.unsplash.com/photo-1565519821194-6d9baf1aee5a">
+  <button id="restartBtn">重新開始</button>
+</div>
+
 <script>
-// 場景設定
 const scenes = {
-  start: {
-    img: "https://images.unsplash.com/photo-1509021436665-8f07dbf5bf1d",
-    text: "深夜，辦公室。你收到一通神秘來電，報案人說有失蹤案件需要你調查。",
-    choices: [
-      { text: "接電話", next: "file" },
-      { text: "忽略電話", next: "alley" }
-    ]
-  },
-  file: {
-    img: "https://images.unsplash.com/photo-1505843513577-22bb7d21e455",
-    text: "你走向桌上的資料，桌上有報紙、信件和照片。",
-    items: [
-      { text: "查看報紙", info: "頭條：『神秘失蹤案震驚城市』" },
-      { text: "打開信件", info: "信封內寫著：『你越接近真相，越危險』" },
-      { text: "看照片", info: "照片中有一個模糊的人影，輪廓像你自己" }
+  start:{
+    img:"https://images.unsplash.com/photo-1509021436665-8f07dbf5bf1d",
+    text:"你的辦公室深夜，一通電話打進來，桌上有報紙、信件、筆記與門。",
+    items:[
+      {text:"📞 電話", img:null, sound:"phoneSound", info:"有人報案！"},
+      {text:"📰 報紙", img:"https://images.unsplash.com/photo-1573497491208-6b1acb260507", sound:"paperSound", info:"報紙頭條：神秘失蹤案"},
+      {text:"✉️ 信件", img:"https://images.unsplash.com/photo-1580910051070-f99b0a914c15", sound:"paperSound", info:"信件寫著：『你越接近真相，越危險』"},
+      {text:"🚪 門", img:"https://images.unsplash.com/photo-1598365572954-99e4a476e6a2", sound:"doorSound", info:"門悄悄打開，陰影閃過..."},
+      {text:"📓 筆記", img:"https://images.unsplash.com/photo-1506880018606-1cb7d6c15d77", sound:"writeSound", info:"筆記上寫著破碎的記憶與線索"}
     ],
-    choices: [
-      { text: "去案發地調查", next: "alley" },
-      { text: "繼續整理桌上線索", next: "file2" }
+    choices:[{text:"出去調查", next:"alley"}]
+  },
+  alley:{
+    img:"https://images.unsplash.com/photo-1486184842419-447224e5ba44",
+    text:"你來到案發巷子，四周靜悄悄。",
+    choices:[
+      {text:"追影子", next:"hospital"},
+      {text:"回辦公室", next:"start"}
     ]
   },
-  file2: {
-    img: "https://images.unsplash.com/photo-1505843513577-22bb7d21e455",
-    text: "你整理桌上的資料，腦中閃過一些記憶片段……",
-    choices: [
-      { text: "回想更多", next: "hospital" },
-      { text: "先去外面調查", next: "alley" }
+  hospital:{
+    img:"https://images.unsplash.com/photo-1530018607912-eff2daa1bac7",
+    text:"你猛然醒來，發現自己在精神病院，戴著手環。原來，你一直在這裡。",
+    choices:[
+      {text:"接受真相", next:null, action:()=>showEnding("hospital")},
+      {text:"否認真相", next:null, action:()=>showEnding("hospital")}
     ]
   },
-  alley: {
-    img: "https://images.unsplash.com/photo-1486184842419-447224e5ba44",
-    text: "你來到案發巷子，夜色濃厚，周圍異常安靜。",
-    choices: [
-      { text: "仔細觀察四周", next: "shadow" },
-      { text: "回辦公室", next: "file" }
-    ]
-  },
-  shadow: {
-    img: "https://images.unsplash.com/photo-1505843513577-22bb7d21e455",
-    text: "你看到一個影子閃過，輪廓竟和你自己很像。",
-    choices: [
-      { text: "追影子", next: "hospital" },
-      { text: "回辦公室研究資料", next: "file" }
-    ]
-  },
-  hospital: {
-    img: "https://images.unsplash.com/photo-1530018607912-eff2daa1bac7",
-    text: "你猛然醒來，發現自己在醫院，戴著病患手環。原來，你一直在這裡。",
-    choices: [
-      { text: "接受真相", next: "end" },
-      { text: "否認一切", next: "end" }
-    ]
-  },
-  end: {
-    img: "https://images.unsplash.com/photo-1530018607912-eff2daa1bac7",
-    text: "這場調查全是你腦中的投射。你不是偵探，只是在醫院努力拼湊破碎的記憶。",
-    choices: [
-      { text: "重新開始", next: "start" }
+  success:{ // 偵探成功結局示意
+    img:"https://images.unsplash.com/photo-1516035069371-29a1c179c5f4",
+    text:"你完成了調查，所有線索指向正確方向。",
+    choices:[
+      {text:"結束調查", next:null, action:()=>showEnding("success")}
     ]
   }
 };
 
-function show(scene) {
-  document.getElementById("bg").style.backgroundImage = `url('${scene.img}')`;
-  document.getElementById("text").innerText = scene.text;
+const endings = {
+  hospital:{ text:"THE END", blood:true },
+  success:{ text:"你真的調查出真相了嗎？", blood:false }
+};
 
-  // 處理物品互動
-  const itemDiv = document.getElementById("items");
-  itemDiv.innerHTML = "";
+function showEnding(type){
+  const endingDiv=document.getElementById("ending");
+  const endingText=document.getElementById("endingText");
+  const bloodImg=document.getElementById("bloodImg");
+  endingDiv.style.display="flex";
+
+  endingText.innerText=endings[type].text;
+  if(endings[type].blood) bloodImg.style.opacity=1;
+  else bloodImg.style.opacity=0;
+
+  document.getElementById("restartBtn").onclick=()=>{
+    endingDiv.style.display="none";
+    show(scenes.start);
+  };
+}
+
+function show(scene){
+  const bgDiv=document.getElementById("bg");
+  bgDiv.style.opacity=0;
+  setTimeout(()=>{ bgDiv.style.backgroundImage=`url('${scene.img}')`; bgDiv.style.opacity=1; },300);
+  document.getElementById("text").innerText=scene.text;
+
+  // 物品互動
+  const itemDiv=document.getElementById("items");
+  itemDiv.innerHTML="";
   if(scene.items){
-    scene.items.forEach(it => {
-      const btn = document.createElement("button");
-      btn.className = "item-btn";
-      btn.innerText = it.text;
-      btn.onclick = () => alert(it.info);
+    scene.items.forEach(it=>{
+      const btn=document.createElement("button");
+      btn.className="item-btn";
+      btn.innerText=it.text;
+      btn.onclick=()=>{
+        if(it.sound) document.getElementById(it.sound).play();
+        if(it.img){
+          document.getElementById("modalImg").src=it.img;
+          document.getElementById("modal").style.display="flex";
+        }
+        alert(it.info);
+      };
       itemDiv.appendChild(btn);
     });
   }
 
-  // 處理選項
-  const choiceDiv = document.getElementById("choices");
-  choiceDiv.innerHTML = "";
+  // 選項按鈕
+  const choiceDiv=document.getElementById("choices");
+  choiceDiv.innerHTML="";
   if(scene.choices){
-    scene.choices.forEach(c => {
-      const btn = document.createElement("button");
-      btn.className = "choice-btn";
-      btn.innerText = c.text;
-      btn.onclick = () => show(scenes[c.next]);
+    scene.choices.forEach(c=>{
+      const btn=document.createElement("button");
+      btn.className="choice-btn";
+      btn.innerText=c.text;
+      btn.onclick=()=>{
+        document.getElementById("clickSound").play();
+        if(c.action) c.action();
+        else show(scenes[c.next]);
+      };
       choiceDiv.appendChild(btn);
     });
   }
+
+  // 精神病院背景音樂切換
+  if(scene===scenes.hospital){
+    const bgm=document.getElementById("bgm");
+    bgm.src="https://cdn.pixabay.com/download/audio/2021/10/07/audio_dfc7f1f0cd.mp3?filename=dark-horror-ambient-11225.mp3";
+    bgm.play();
+  }
 }
 
-// 啟動遊戲
+// 開始遊戲
 show(scenes.start);
 </script>
 
 </body>
 </html>
+
 
 </script>
 

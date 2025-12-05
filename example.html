@@ -10,9 +10,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>統一畫風懸案遊戲</title>
+<title>懸案互動遊戲示範</title>
 <style>
-body {margin:0; font-family:Arial,sans-serif; background:black; color:white; overflow:hidden;}
+body { margin:0; font-family:Arial,sans-serif; background:black; color:white; overflow:hidden;}
 #game-container {
   position:relative; width:100%; height:100vh;
   background-size:cover; background-position:center;
@@ -32,7 +32,7 @@ body {margin:0; font-family:Arial,sans-serif; background:black; color:white; ove
 /* 報紙翻頁動畫 */
 .paper-container { perspective: 1000px; position:absolute; }
 .paper-flip {
-  width:100px; transform-origin:left center;
+  width:120px; transform-origin:left center;
   transition: transform 1s ease, box-shadow 1s ease;
   box-shadow:0 5px 15px rgba(0,0,0,0.3);
 }
@@ -55,10 +55,10 @@ body {margin:0; font-family:Arial,sans-serif; background:black; color:white; ove
 <div id="game-container"></div>
 <div id="clue-text"></div>
 
-<audio id="sound-newspaper" src="sounds/newspaper.mp3"></audio>
-<audio id="sound-folder" src="sounds/folder.mp3"></audio>
-<audio id="sound-bottle" src="sounds/bottle.mp3"></audio>
-<audio id="sound-letter" src="sounds/letter.mp3"></audio>
+<audio id="sound-newspaper" src="https://opengameart.org/sites/default/files/Newspaper.mp3"></audio>
+<audio id="sound-folder" src="https://opengameart.org/sites/default/files/Folder.mp3"></audio>
+<audio id="sound-bottle" src="https://opengameart.org/sites/default/files/Bottle.mp3"></audio>
+<audio id="sound-letter" src="https://opengameart.org/sites/default/files/Letter.mp3"></audio>
 
 <script>
 const container = document.getElementById('game-container');
@@ -72,15 +72,15 @@ const sounds = {
 
 let sceneIndex = 0;
 const scenes = [
-  { background: 'images/bg_office.png', objects: [
-      {src:'images/newspaper.png', bottom:'100px', left:'50%', text:'你發現一篇報導，提到受害人收到神秘信件…', next:1, sound:'newspaper'}
+  { background: 'https://opengameart.org/sites/default/files/bg_office.png', objects: [
+      {src:'https://opengameart.org/sites/default/files/newspaper.png', bottom:'100px', left:'50%', text:'你發現一篇報導，提到受害人收到神秘信件…', next:1, sound:'newspaper'}
   ]},
-  { background: 'images/bg_house.png', objects: [
-      {src:'images/folder.png', bottom:'80px', left:'40%', text:'你找到一份文件夾，上面寫著「秘密」字樣。', next:2, sound:'folder'},
-      {src:'images/bottle.png', bottom:'80px', left:'60%', text:'桌上有打翻的藥瓶，裡面有筆記。', next:2, sound:'bottle'}
+  { background: 'https://opengameart.org/sites/default/files/bg_house.png', objects: [
+      {src:'https://opengameart.org/sites/default/files/folder.png', bottom:'80px', left:'40%', text:'你找到一份文件夾，上面寫著「秘密」字樣。', next:2, sound:'folder'},
+      {src:'https://opengameart.org/sites/default/files/bottle.png', bottom:'80px', left:'60%', text:'桌上有打翻的藥瓶，裡面有筆記。', next:2, sound:'bottle'}
   ]},
-  { background: 'images/bg_hallway.png', objects: [
-      {src:'images/letter.png', bottom:'50px', left:'45%', text:'你在牆角找到一封信，提到精神病院的事情…', next:null, sound:'letter'}
+  { background: 'https://opengameart.org/sites/default/files/bg_hallway.png', objects: [
+      {src:'https://opengameart.org/sites/default/files/letter.png', bottom:'50px', left:'45%', text:'你在牆角找到一封信，提到精神病院的事情…', next:null, sound:'letter'}
   ]}
 ];
 
@@ -145,7 +145,7 @@ function showEndingOptions(){
 
 function loadEnding(isHospital){
   clearContainer();
-  container.style.backgroundImage='url(images/bg_hallway.png)';
+  container.style.backgroundImage='url(https://opengameart.org/sites/default/files/bg_hallway.png)';
   if(isHospital){
     const endText=document.createElement('div');
     endText.classList.add('blood-text');
@@ -176,6 +176,7 @@ loadScene(0);
 </script>
 </body>
 </html>
+
 
 </html>
 

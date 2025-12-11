@@ -5,119 +5,145 @@
     <link rel="icon"href="icon.png.png">
   </head>
   <body>
-# Escape Labyrinth Hotel - Prototype using pygame
-# Basic framework: player moving in maze, ghost patrolling.
-# NOTE: This is a simplified prototype. You may add assets, sounds, etc.
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Labyrinth Hotel Escape - Web</title>
+<style>
+  body {
+    margin: 0;
+    background: #000;
+    display: flex;
+    height: 100vh;
+    justify-content: center;
+    align-items: center;
+  }
+  canvas {
+    border: 3px solid #fff;
+  }
+</style>
+</head>
+<body>
+<canvas id="game" width="640" height="640"></canvas>
+<script>
+// --- Maze Map (W = Wall, . = Floor, G = Goal) ---
+const maze = [
+  "WWWWWWWWWWWWWWWWWWWW",
+  "W.........W.........W",
+  "W.WWW.WWW.W.WWW.WWW.W",
+  "W.WGW...W...W....W.WW",
+  "W.WWW.WWWWW.WWWWW.W.W",
+  "W.....W.....W.....W.W",
+  "WWW.W.W.WWWWW.W.W.WWW",
+  "W...W.W...W...W.W...W",
+  "W.WWWWW.W.W.W.WWWWW.W",
+  "W.......W...W.......W",
+  "WWWWWWWWWWWWWWWWWWWWWW"
+];
 
-import pygame
-import sys
-import random
+const TILE = 32;
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
 
-pygame.init()
+let player = { x: 1, y: 1 };
+let ghost = { x: 10, y: 5, mode: "patrol", timer: 0 };
 
-WIDTH, HEIGHT = 800, 600
-TILE = 40
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Labyrinth Hotel Prototype")
-clock = pygame.time.Clock()
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-# Colors
-WHITE = (255,255,255)
-BLACK = (0,0,0)
-RED = (200,0,0)
-BLUE = (0,0,200)
-GREY = (80,80,80)
+  for (let y = 0; y < maze.length; y++) {
+    for (let x = 0; x < maze[y].length; x++) {
+      if (maze[y][x] === "W") {
+        ctx.fillStyle = "#333";
+        ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+      } else if (maze[y][x] === "G") {
+        ctx.fillStyle = "#0f0";
+        ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+      }
+    }
+  }
 
-# Simple map
-maze = [
-"#############################",
-"#S       #   G      #     E#",
-"### ##### # #### ## # ######",
-"#   #   #   #       #      #",
-"# ### ### ### ####### #### #",
-"#   #       H      # #     #",
-"# # ####### ####### # # ### #",
-"# #       #     #     #     #",
-"# ### ######### ##### #######",
-"#     #     #   #       #   #",
-"#############################",
-]
+  // Player
+  ctx.fillStyle = "#0ff";
+  ctx.fillRect(player.x * TILE, player.y * TILE, TILE, TILE);
 
-player_pos = [1,1]
-ghost_pos = [10,1]
-hide_spots = []
-exit_pos = None
-walls = []
+  // Ghost
+  ctx.fillStyle = "#f00";
+  ctx.fillRect(ghost.x * TILE, ghost.y * TILE, TILE, TILE);
+}
 
-for y,row in enumerate(maze):
-    for x,ch in enumerate(row):
-        if ch == '#':
-            walls.append((x,y))
-        if ch == 'S':
-            player_pos = [x,y]
-        if ch == 'G':
-            ghost_pos = [x,y]
-        if ch == 'H':
-            hide_spots.append((x,y))
-        if ch == 'E':
-            exit_pos = (x,y)
+function canMove(x, y) {
+  return maze[y][x] !== "W";
+}
 
-def draw_maze():
-    for (x,y) in walls:
-        pygame.draw.rect(screen, GREY, (x*TILE, y*TILE, TILE, TILE))
-    for (hx,hy) in hide_spots:
-        pygame.draw.rect(screen, (0,100,0), (hx*TILE, hy*TILE, TILE, TILE))
-    if exit_pos:
-        pygame.draw.rect(screen, (200,200,0), (exit_pos[0]*TILE, exit_pos[1]*TILE, TILE, TILE))
+// --- Player Move ---
+document.addEventListener("keydown", (e) => {
+  let nx = player.x;
+  let ny = player.y;
+  if (e.key === "ArrowUp") ny--;
+  if (e.key === "ArrowDown") ny++;
+  if (e.key === "ArrowLeft") nx--;
+  if (e.key === "ArrowRight") nx++;
 
+  if (canMove(nx, ny)) {
+    player.x = nx;
+    player.y = ny;
+  }
+});
 
-def move_entity(pos, dx, dy):
-    nx, ny = pos[0] + dx, pos[1] + dy
-    if (nx,ny) not in walls:
-        pos[0], pos[1] = nx, ny
+// --- Ghost AI ---
+function ghostAI() {
+  ghost.timer++;
 
+  // Simple chasing behavior every 20 frames
+  if (ghost.timer % 20 === 0) {
+    let dx = player.x - ghost.x;
+    let dy = player.y - ghost.y;
 
-def ghost_ai():
-    # Random patrol
-    if random.random() < 0.02:
-        move = random.choice([(1,0),(-1,0),(0,1),(0,-1)])
-        move_entity(ghost_pos, move[0], move[1])
+    let mx = ghost.x + Math.sign(dx);
+    let my = ghost.y + Math.sign(dy);
 
-running = True
-while running:
-    clock.tick(10)
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
+    if (Math.abs(dx) > Math.abs(dy)) {
+      if (canMove(mx, ghost.y)) ghost.x = mx;
+      else if (canMove(ghost.x, my)) ghost.y = my;
+    } else {
+      if (canMove(ghost.x, my)) ghost.y = my;
+      else if (canMove(mx, ghost.y)) ghost.x = mx;
+    }
+  }
+}
 
-    keys = pygame.key.get_pressed()
-    if keys[pygame.K_UP]: move_entity(player_pos,0,-1)
-    if keys[pygame.K_DOWN]: move_entity(player_pos,0,1)
-    if keys[pygame.K_LEFT]: move_entity(player_pos,-1,0)
-    if keys[pygame.K_RIGHT]: move_entity(player_pos,1,0)
+// --- Check Win & Lose ---
+function checkState() {
+  if (maze[player.y][player.x] === "G") {
+    alert("你成功逃出鬼店！");
+    reset();
+  }
 
-    ghost_ai()
+  if (player.x === ghost.x && player.y === ghost.y) {
+    alert("你被惡鬼抓到了！");
+    reset();
+  }
+}
 
-    screen.fill(BLACK)
-    draw_maze()
+function reset() {
+  player = { x: 1, y: 1 };
+  ghost = { x: 10, y: 5, timer: 0 };
+}
 
-    # Draw player
-    pygame.draw.rect(screen, BLUE, (player_pos[0]*TILE, player_pos[1]*TILE, TILE, TILE))
-    # Draw ghost
-    pygame.draw.rect(screen, RED, (ghost_pos[0]*TILE, ghost_pos[1]*TILE, TILE, TILE))
+function loop() {
+  ghostAI();
+  draw();
+  checkState();
+  requestAnimationFrame(loop);
+}
 
-    # Check collision
-    if player_pos == ghost_pos:
-        pygame.display.set_caption("Caught by the Caretaker!")
-
-    # Check exit
-    if tuple(player_pos) == exit_pos:
-        pygame.display.set_caption("You Escaped the Hotel!")
-
-    pygame.display.flip()
-
-pygame.quit()
-sys.exit()
+loop();
+</script>
+</body>
+</html>
 
 
 </script>

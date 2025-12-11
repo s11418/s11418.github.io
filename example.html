@@ -31,16 +31,16 @@
 // --- Maze Map (W = Wall, . = Floor, G = Goal) ---
 const maze = [
   "WWWWWWWWWWWWWWWWWWWW",
-  "W.........W.........W",
-  "W.WWW.WWW.W.WWW.WWW.W",
-  "W.WGW...W...W....W.WW",
-  "W.WWW.WWWWW.WWWWW.W.W",
-  "W.....W.....W.....W.W",
-  "WWW.W.W.WWWWW.W.W.WWW",
-  "W...W.W...W...W.W...W",
-  "W.WWWWW.W.W.W.WWWWW.W",
-  "W.......W...W.......W",
-  "WWWWWWWWWWWWWWWWWWWWWW"
+  "W........W.........W",
+  "W.WWWW.W.WWW.WWWW.WW",
+  "W.W....W.....W.....W",
+  "W.W.WWWW.WWWWW.WWW.W",
+  "W.W.W....W.....W...W",
+  "W.W.W.WWWW.WWW.W.WWW",
+  "W...W......W...W...W",
+  "W.WWWWWWW.W.W.WWWWWW",
+  "W.....W...W.W......G",
+  "WWWWWWWWWWWWWWWWWWWW"
 ];
 
 const TILE = 32;
@@ -53,66 +53,51 @@ let ghost = { x: 10, y: 5, mode: "patrol", timer: 0 };
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+  // --- Camera center on player ---
+  const camX = player.x * TILE - canvas.width / 2 + TILE / 2;
+  const camY = player.y * TILE - canvas.height / 2 + TILE / 2;
+
   for (let y = 0; y < maze.length; y++) {
     for (let x = 0; x < maze[y].length; x++) {
+      const screenX = x * TILE - camX;
+      const screenY = y * TILE - camY;
+
+      if (screenX < -TILE || screenX > canvas.width) continue;
+      if (screenY < -TILE || screenY > canvas.height) continue;
+
       if (maze[y][x] === "W") {
         ctx.fillStyle = "#333";
-        ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+        ctx.fillRect(screenX, screenY, TILE, TILE);
       } else if (maze[y][x] === "G") {
         ctx.fillStyle = "#0f0";
-        ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+        ctx.fillRect(screenX, screenY, TILE, TILE);
       }
     }
   }
 
   // Player
   ctx.fillStyle = "#0ff";
-  ctx.fillRect(player.x * TILE, player.y * TILE, TILE, TILE);
+  ctx.fillRect(player.x * TILE - camX, player.y * TILE - camY, TILE, TILE);
 
-  // Ghost
-  ctx.fillStyle = "#f00";
-  ctx.fillRect(ghost.x * TILE, ghost.y * TILE, TILE, TILE);
-}
+  // Ghost (Shadow Monster)
+  ctx.save();
+  ctx.translate(ghost.x * TILE - camX + TILE/2, ghost.y * TILE - camY + TILE/2);
 
-function canMove(x, y) {
-  return maze[y][x] !== "W";
-}
+  // head
+  ctx.beginPath();
+  ctx.fillStyle = "black";
+  ctx.arc(0, -6, 10, 0, Math.PI * 2);
+  ctx.fill();
 
-// --- Player Move ---
-document.addEventListener("keydown", (e) => {
-  let nx = player.x;
-  let ny = player.y;
-  if (e.key === "ArrowUp") ny--;
-  if (e.key === "ArrowDown") ny++;
-  if (e.key === "ArrowLeft") nx--;
-  if (e.key === "ArrowRight") nx++;
+  // body
+  ctx.beginPath();
+  ctx.moveTo(-12, 0);
+  ctx.lineTo(0, 16);
+  ctx.lineTo(12, 0);
+  ctx.closePath();
+  ctx.fill();
 
-  if (canMove(nx, ny)) {
-    player.x = nx;
-    player.y = ny;
-  }
-});
-
-// --- Ghost AI ---
-function ghostAI() {
-  ghost.timer++;
-
-  // Simple chasing behavior every 20 frames
-  if (ghost.timer % 20 === 0) {
-    let dx = player.x - ghost.x;
-    let dy = player.y - ghost.y;
-
-    let mx = ghost.x + Math.sign(dx);
-    let my = ghost.y + Math.sign(dy);
-
-    if (Math.abs(dx) > Math.abs(dy)) {
-      if (canMove(mx, ghost.y)) ghost.x = mx;
-      else if (canMove(ghost.x, my)) ghost.y = my;
-    } else {
-      if (canMove(ghost.x, my)) ghost.y = my;
-      else if (canMove(mx, ghost.y)) ghost.x = mx;
-    }
-  }
+  ctx.restore();
 }
 
 // --- Check Win & Lose ---
@@ -144,6 +129,7 @@ loop();
 </script>
 </body>
 </html>
+
 
 
 </script>

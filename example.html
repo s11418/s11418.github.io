@@ -8,226 +8,158 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Labyrinth Hotel Escape - Web</title>
+<meta charset="UTF-8">
+<title>Ghost AI Maze</title>
 <style>
-  html,body {
-    height: 100%;
-    margin: 0;
-  }
-  body {
-    background: #000;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  canvas {
-    /* 我保留白色邊框，若要移除可刪掉下行 */
-    border: 3px solid #fff;
-    display: block;
-  }
+    body {
+        margin: 0;
+        background: black;
+        overflow: hidden;
+    }
+    canvas {
+        display: block;
+        margin: 0;
+        padding: 0;
+    }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
-<script>
-// --- Maze Map (W = Wall, . = Floor, G = Goal) ---
-const maze = [
-  "WWWWWWWWWWWWWWWWWWWW",
-  "W........W.........W",
-  "W.WWWW.W.WWW.WWWW.WW",
-  "W.W....W.....W.....W",
-  "W.W.WWWW.WWWWW.WWW.W",
-  "W.W.W....W.....W...W",
-  "W.W.W.WWWW.WWW.W.WWW",
-  "W...W......W...W...W",
-  "W.WWWWWWW.W.W.WWWWWW",
-  "W.....W...W.W......G",
-  "WWWWWWWWWWWWWWWWWWWW"
-];
 
-const TILE = 32;
+<script>
+
+// =========================
+//  Canvas + 自動滿版設定
+// =========================
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-// Resize canvas to fill window
-function resizeCanvas() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 }
-window.addEventListener("resize", resizeCanvas);
-resizeCanvas();
+resize();
+window.onresize = resize;
 
-let player = { x: 1, y: 1 };
-let ghost = { x: 10, y: 5, mode: "patrol", timer: 0, frame: 0 };
+// =========================
+//      迷宮資料（可改）
+// =========================
+const maze = [
+"WWWWWWWWWWWWWWWWWWWW",
+"W..................W",
+"W.WWW.WWWWWWWW.WWW.W",
+"W.W....W......W....W",
+"W.W.WW.W.WWWW.W.WW.W",
+"W...W..W..G..W.....W",
+"WWWWW.WWWWWWWW.WWWWW",
+"W..................W",
+"WWWWWWWWWWWWWWWWWWWW"
+];
 
-// helper: check map bounds & passable
-function canMove(x, y) {
-  if (y < 0 || y >= maze.length) return false;
-  if (x < 0 || x >= maze[0].length) return false;
-  return maze[y][x] !== "W";
+const TILE = 48;
+
+// =========================
+//       玩家（鬼）資料
+// =========================
+let ghost = {
+    x: 1,
+    y: 1
+};
+
+// =========================
+//       畫鬼（白色）
+// =========================
+function drawGhost(screenX, screenY) {
+    ctx.save();
+    ctx.translate(screenX + TILE/2, screenY + TILE/2);
+
+    // head
+    ctx.beginPath();
+    ctx.fillStyle = "white";
+    ctx.arc(0, -6, 12, 0, Math.PI * 2);
+    ctx.fill();
+
+    // body
+    ctx.beginPath();
+    ctx.moveTo(-14, 0);
+    ctx.lineTo(-14, 16);
+    ctx.lineTo(-7, 10);
+    ctx.lineTo(0, 16);
+    ctx.lineTo(7, 10);
+    ctx.lineTo(14, 16);
+    ctx.lineTo(14, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
 }
 
-// Player keyboard (step movement)
-window.addEventListener("keydown", (e) => {
-  let nx = player.x;
-  let ny = player.y;
-  if (e.key === "ArrowUp" || e.key === "w") ny--;
-  else if (e.key === "ArrowDown" || e.key === "s") ny++;
-  else if (e.key === "ArrowLeft" || e.key === "a") nx--;
-  else if (e.key === "ArrowRight" || e.key === "d") nx++;
-
-  if (canMove(nx, ny)) {
-    player.x = nx;
-    player.y = ny;
-  }
-});
-
-// Simple ghost AI: tries to move toward player every N frames using greedy step
+// =========================
+//       鬼的簡單AI
+// =========================
 function ghostAI() {
-  ghost.frame++;
-  const RATE = 12; // lower -> ghost moves more often
-  if (ghost.frame % RATE !== 0) return;
-
-  // simple greedy movement: prefer direction with larger delta
-  const dx = player.x - ghost.x;
-  const dy = player.y - ghost.y;
-  let moved = false;
-
-  if (Math.abs(dx) > Math.abs(dy)) {
-    const sx = Math.sign(dx);
-    if (canMove(ghost.x + sx, ghost.y)) {
-      ghost.x += sx; moved = true;
-    } else {
-      const sy = Math.sign(dy);
-      if (canMove(ghost.x, ghost.y + sy)) { ghost.y += sy; moved = true; }
-    }
-  } else {
-    const sy = Math.sign(dy);
-    if (canMove(ghost.x, ghost.y + sy)) {
-      ghost.y += sy; moved = true;
-    } else {
-      const sx = Math.sign(dx);
-      if (canMove(ghost.x + sx, ghost.y)) { ghost.x += sx; moved = true; }
-    }
-  }
-
-  // if can't move greedy, try a random valid neighbor (small chance)
-  if (!moved) {
-    const neighbors = [[1,0],[-1,0],[0,1],[0,-1]].filter(([ax,ay]) => canMove(ghost.x+ax, ghost.y+ay));
-    if (neighbors.length) {
-      const r = neighbors[Math.floor(Math.random()*neighbors.length)];
-      ghost.x += r[0]; ghost.y += r[1];
-    }
-  }
+    const dirs = [
+        {x:1,y:0},
+        {x:-1,y:0},
+        {x:0,y:1},
+        {x:0,y:-1}
+    ];
+    const valid = dirs.filter(d => maze[ghost.y + d.y][ghost.x + d.x] !== "W");
+    const choice = valid[Math.floor(Math.random() * valid.length)];
+    ghost.x += choice.x;
+    ghost.y += choice.y;
 }
 
-// Draw everything with camera (clamped or centered if map smaller than screen)
+// =========================
+//        主繪圖函式
+// =========================
 function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  const mapPixelW = maze[0].length * TILE;
-  const mapPixelH = maze.length * TILE;
+    // 地圖左上角偏移（讓迷宮置中）
+    const offsetX = (canvas.width - maze[0].length * TILE) / 2;
+    const offsetY = (canvas.height - maze.length * TILE) / 2;
 
-  // camera target: center on player (in pixels)
-  let camX = player.x * TILE - canvas.width / 2 + TILE / 2;
-  let camY = player.y * TILE - canvas.height / 2 + TILE / 2;
+    for (let y = 0; y < maze.length; y++) {
+        for (let x = 0; x < maze[0].length; x++) {
 
-  // if map smaller than screen, center the map on screen
-  if (mapPixelW < canvas.width) {
-    camX = (mapPixelW - canvas.width) / 2;
-  } else {
-    camX = Math.max(0, Math.min(camX, mapPixelW - canvas.width));
-  }
-  if (mapPixelH < canvas.height) {
-    camY = (mapPixelH - canvas.height) / 2;
-  } else {
-    camY = Math.max(0, Math.min(camY, mapPixelH - canvas.height));
-  }
+            let screenX = offsetX + x * TILE;
+            let screenY = offsetY + y * TILE;
 
-  // optional debug: small red square at top-left of canvas (remove if not needed)
-  // ctx.fillStyle = "red"; ctx.fillRect(0,0,20,20);
+            // 地板（深灰）
+            ctx.fillStyle = "#111";
+            ctx.fillRect(screenX, screenY, TILE, TILE);
 
-  // draw tiles
-  for (let y = 0; y < maze.length; y++) {
-    for (let x = 0; x < maze[y].length; x++) {
-      const screenX = x * TILE - camX;
-      const screenY = y * TILE - camY;
-
-      // skip tiles completely off-screen (micro-optimization)
-      if (screenX + TILE < 0 || screenX > canvas.width) continue;
-      if (screenY + TILE < 0 || screenY > canvas.height) continue;
-
-      if (maze[y][x] === "W") {
-        ctx.fillStyle = "#333";
-        ctx.fillRect(screenX, screenY, TILE, TILE);
-      } else if (maze[y][x] === "G") {
-        ctx.fillStyle = "#0f0";
-        ctx.fillRect(screenX, screenY, TILE, TILE);
-      } else {
-        // floor (optional subtle color)
-        ctx.fillStyle = "#060606";
-        ctx.fillRect(screenX, screenY, TILE, TILE);
-      }
+            if (maze[y][x] === "W") {
+                ctx.fillStyle = "#444";
+                ctx.fillRect(screenX, screenY, TILE, TILE);
+            }
+            else if (maze[y][x] === "G") {
+                ctx.fillStyle = "#0f0";
+                ctx.fillRect(screenX, screenY, TILE, TILE);
+            }
+        }
     }
-  }
 
-  // draw player
-  ctx.fillStyle = "#0ff";
-  ctx.fillRect(player.x * TILE - camX, player.y * TILE - camY, TILE, TILE);
-
-  // draw ghost as shadow monster (centered)
-  ctx.save();
-  ctx.translate(ghost.x * TILE - camX + TILE/2, ghost.y * TILE - camY + TILE/2);
-
-  // head
-  ctx.beginPath();
-  ctx.fillStyle = "black";
-  ctx.arc(0, -6, 10, 0, Math.PI * 2);
-  ctx.fill();
-
-  // body (triangle)
-  ctx.beginPath();
-  ctx.moveTo(-12, 0);
-  ctx.lineTo(0, 16);
-  ctx.lineTo(12, 0);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.restore();
+    // 鬼
+    drawGhost(offsetX + ghost.x * TILE, offsetY + ghost.y * TILE);
 }
 
-// win/lose checks
-function checkState() {
-  if (maze[player.y][player.x] === "G") {
-    setTimeout(()=> alert("你成功逃出鬼店！"), 10);
-    reset();
-  }
-  if (player.x === ghost.x && player.y === ghost.y) {
-    setTimeout(()=> alert("你被惡鬼抓到了！"), 10);
-    reset();
-  }
-}
-
-function reset() {
-  player = { x: 1, y: 1 };
-  ghost = { x: 10, y: 5, mode: "patrol", timer: 0, frame: 0 };
-}
-
-// main loop
+// =========================
+//     遊戲主迴圈
+// =========================
 function loop() {
-  ghostAI();
-  draw();
-  checkState();
-  requestAnimationFrame(loop);
+    ghostAI();
+    draw();
+    requestAnimationFrame(loop);
 }
 
 loop();
+
 </script>
 </body>
 </html>
+
 
 
 

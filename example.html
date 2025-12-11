@@ -13,28 +13,17 @@
 <title>Labyrinth Hotel Escape - Web</title>
 <style>
   body {
-<!DOCTYPE html>
-<html lang="zh-Hant">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Labyrinth Hotel Escape - Web</title>
-<style>
-  body {
     margin: 0;
     background: #000;
-    display: flex;
-    height: 100vh;
-    justify-content: center;
-    align-items: center;
-  }
+    overflow: hidden;
+}
   canvas {
     border: 3px solid #fff;
   }
 </style>
 </head>
 <body>
-<canvas id="game" width="640" height="640"></canvas>
+<canvas id="game"></canvas></canvas>
 <script>
 // --- Maze Map (W = Wall, . = Floor, G = Goal) ---
 const maze = [
@@ -53,6 +42,12 @@ const maze = [
 
 const TILE = 32;
 const canvas = document.getElementById("game");
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
 const ctx = canvas.getContext("2d");
 
 let player = { x: 1, y: 1 };
@@ -142,6 +137,7 @@ loop();
 </script>
 </body>
 </html>
+
 
 
 

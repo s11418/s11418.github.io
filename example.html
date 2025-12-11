@@ -291,6 +291,38 @@ function drawDemon(gx, gy, camX, camY, t) {
 // flashlight mask: draw a dark fullscreen then cut a radial gradient around player
 function drawFlashlight(px, py, camX, camY) {
   ctx.save();
+
+  // 全畫面稍微暗一點，而不是蓋滿黑
+  ctx.fillStyle = 'rgba(0,0,0,0.70)';
+  ctx.fillRect(0,0,canvas.width, canvas.height);
+
+  ctx.globalCompositeOperation = 'destination-out';
+
+  const fov = DIFFICULTY[difficulty].fov;
+
+  const centerX = px * TILE - camX + TILE/2;
+  const centerY = py * TILE - camY + TILE/2;
+
+  // 加強亮區（更大、更亮）
+  const grad = ctx.createRadialGradient(
+    centerX, centerY, fov * 0.10,
+    centerX, centerY, fov * 1.1
+  );
+
+  grad.addColorStop(0, 'rgba(0,0,0,1)');
+  grad.addColorStop(0.4, 'rgba(0,0,0,0.6)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, fov * 1.1, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.restore();
+}
+{
+  ctx.save();
   // full dark
   ctx.fillStyle = 'rgba(0,0,0,0.95)';
   ctx.fillRect(0,0,canvas.width, canvas.height);
@@ -586,8 +618,6 @@ requestAnimationFrame(mainLoop);
 </script>
 </body>
 </html>
-<
-
 
 
 

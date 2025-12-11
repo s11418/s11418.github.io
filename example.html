@@ -13,6 +13,14 @@
 <title>Labyrinth Hotel Escape - Web</title>
 <style>
   body {
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Labyrinth Hotel Escape - Web</title>
+<style>
+  body {
     margin: 0;
     background: #000;
     display: flex;
@@ -54,8 +62,13 @@ function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   // --- Camera center on player ---
-  const camX = player.x * TILE - canvas.width / 2 + TILE / 2;
-  const camY = player.y * TILE - canvas.height / 2 + TILE / 2;
+  // --- Camera center on player but clamped ---
+  let camX = player.x * TILE - canvas.width / 2 + TILE / 2;
+  let camY = player.y * TILE - canvas.height / 2 + TILE / 2;
+
+  // Clamp so camera never shows too much empty space
+  camX = Math.max(0, Math.min(camX, maze[0].length * TILE - canvas.width));
+  camY = Math.max(0, Math.min(camY, maze.length * TILE - canvas.height));
 
   for (let y = 0; y < maze.length; y++) {
     for (let x = 0; x < maze[y].length; x++) {
@@ -129,6 +142,7 @@ loop();
 </script>
 </body>
 </html>
+
 
 
 

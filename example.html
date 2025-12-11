@@ -5,161 +5,225 @@
     <link rel="icon"href="icon.png.png">
   </head>
   <body>
-<!DOCTYPE html>
-<html lang="zh-Hant">
-<head>
-<meta charset="UTF-8">
-<title>Ghost AI Maze</title>
-<style>
-    body {
-        margin: 0;
-        background: black;
-        overflow: hidden;
-    }
-    canvas {
-        display: block;
-        margin: 0;
-        padding: 0;
-    }
-</style>
-</head>
-<body>
-<canvas id="game"></canvas>
-
 <script>
+// ==================== Config ====================
+const TILE = 32;
 
-// =========================
-//  Canvas + 自動滿版設定
-// =========================
+// Maze Template (每次會重生鬼與玩家)
+let maze = [
+  "WWWWWWWWWWWWWWWWWWWW",
+  "W........W.........W",
+  "W.WWWW.W.WWW.WWWW.WW",
+  "W.W....W.....W.....W",
+  "W.W.WWWW.WWWWW.WWW.W",
+  "W.W.W....W.....W...W",
+  "W.W.W.WWWW.WWW.W.WWW",
+  "W...W......W...W...W",
+  "W.WWWWWWW.W.W.WWWWWW",
+  "W.....W...W.W......G",
+  "WWWWWWWWWWWWWWWWWWWW"
+];
+
+// ==================== Canvas ====================
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
 }
-resize();
-window.onresize = resize;
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
 
-// =========================
-//      迷宮資料（可改）
-// =========================
-const maze = [
-"WWWWWWWWWWWWWWWWWWWW",
-"W..................W",
-"W.WWW.WWWWWWWW.WWW.W",
-"W.W....W......W....W",
-"W.W.WW.W.WWWW.W.WW.W",
-"W...W..W..G..W.....W",
-"WWWWW.WWWWWWWW.WWWWW",
-"W..................W",
-"WWWWWWWWWWWWWWWWWWWW"
+// ==================== Game State ====================
+let level = 1;
+let ammo = 5;
+let player = { x: 1, y: 1 };
+
+// 三隻鬼（協同 AI）
+let ghosts = [
+  { x: 10, y: 5, type: "chaser" },     // 鬼A：直接追玩家
+  { x: 15, y: 2, type: "predict" },    // 鬼B：預測玩家移動
+  { x: 3,  y: 8, type: "flank" }       // 鬼C：包抄
 ];
 
-const TILE = 48;
+// ==================== Input ====================
+const keys = {};
+document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keyup",   e => keys[e.key] = false);
 
-// =========================
-//       玩家（鬼）資料
-// =========================
-let ghost = {
-    x: 1,
-    y: 1
-};
+// ==================== Movement ====================
+function movePlayer() {
+  let ox = player.x, oy = player.y;
+  if (keys["ArrowUp"])    oy--;
+  if (keys["ArrowDown"])  oy++;
+  if (keys["ArrowLeft"])  ox--;
+  if (keys["ArrowRight"]) ox++;
 
-// =========================
-//       畫鬼（白色）
-// =========================
-function drawGhost(screenX, screenY) {
-    ctx.save();
-    ctx.translate(screenX + TILE/2, screenY + TILE/2);
-
-    // head
-    ctx.beginPath();
-    ctx.fillStyle = "white";
-    ctx.arc(0, -6, 12, 0, Math.PI * 2);
-    ctx.fill();
-
-    // body
-    ctx.beginPath();
-    ctx.moveTo(-14, 0);
-    ctx.lineTo(-14, 16);
-    ctx.lineTo(-7, 10);
-    ctx.lineTo(0, 16);
-    ctx.lineTo(7, 10);
-    ctx.lineTo(14, 16);
-    ctx.lineTo(14, 0);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.restore();
+  if (maze[oy][ox] !== "W") {
+    player.x = ox;
+    player.y = oy;
+  }
 }
 
-// =========================
-//       鬼的簡單AI
-// =========================
-function ghostAI() {
-    const dirs = [
-        {x:1,y:0},
-        {x:-1,y:0},
-        {x:0,y:1},
-        {x:0,y:-1}
-    ];
-    const valid = dirs.filter(d => maze[ghost.y + d.y][ghost.x + d.x] !== "W");
-    const choice = valid[Math.floor(Math.random() * valid.length)];
-    ghost.x += choice.x;
-    ghost.y += choice.y;
+// ==================== Shooting ====================
+function shoot() {
+  if (!keys[" "] || ammo <= 0) return;
+
+  keys[" "] = false;
+  ammo--;
+
+  ghosts = ghosts.filter(g => {
+    let d = Math.abs(g.x - player.x) + Math.abs(g.y - player.y);
+    return d > 1;  // 距離 <=1 的鬼會被擊殺
+  });
+
+  if (ghosts.length === 0) {
+    alert("你擊退所有惡鬼！前往下一關！");
+    nextLevel();
+  }
 }
 
-// =========================
-//        主繪圖函式
-// =========================
-function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+document.addEventListener("keydown", e => {
+  if (e.key === " ") shoot();
+});
 
-    // 地圖左上角偏移（讓迷宮置中）
-    const offsetX = (canvas.width - maze[0].length * TILE) / 2;
-    const offsetY = (canvas.height - maze.length * TILE) / 2;
+// ==================== Ghost AI ====================
+function isWalkable(x, y) {
+  return maze[y] && maze[y][x] && maze[y][x] !== "W";
+}
 
-    for (let y = 0; y < maze.length; y++) {
-        for (let x = 0; x < maze[0].length; x++) {
+function stepTowards(x, y, tx, ty) {
+  let bestX = x, bestY = y;
+  let bestDist = 9999;
 
-            let screenX = offsetX + x * TILE;
-            let screenY = offsetY + y * TILE;
-
-            // 地板（深灰）
-            ctx.fillStyle = "#111";
-            ctx.fillRect(screenX, screenY, TILE, TILE);
-
-            if (maze[y][x] === "W") {
-                ctx.fillStyle = "#444";
-                ctx.fillRect(screenX, screenY, TILE, TILE);
-            }
-            else if (maze[y][x] === "G") {
-                ctx.fillStyle = "#0f0";
-                ctx.fillRect(screenX, screenY, TILE, TILE);
-            }
-        }
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+  for (let [dx,dy] of dirs) {
+    let nx = x + dx, ny = y + dy;
+    if (isWalkable(nx, ny)) {
+      let dist = Math.abs(nx - tx) + Math.abs(ny - ty);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestX = nx;
+        bestY = ny;
+      }
     }
-
-    // 鬼
-    drawGhost(offsetX + ghost.x * TILE, offsetY + ghost.y * TILE);
+  }
+  return { x: bestX, y: bestY };
 }
 
-// =========================
-//     遊戲主迴圈
-// =========================
+function ghostAI() {
+  ghosts = ghosts.map(g => {
+    if (g.type === "chaser") {
+      return stepTowards(g.x, g.y, player.x, player.y);
+    }
+    else if (g.type === "predict") {
+      // 預測玩家下一步
+      let px = player.x;
+      let py = player.y;
+      if (keys["ArrowUp"])    py--;
+      if (keys["ArrowDown"])  py++;
+      if (keys["ArrowLeft"])  px--;
+      if (keys["ArrowRight"]) px++;
+
+      return stepTowards(g.x, g.y, px, py);
+    }
+    else if (g.type === "flank") {
+      // 包抄：朝玩家的反方向走
+      let tx = player.x + (player.x - g.x);
+      let ty = player.y + (player.y - g.y);
+      return stepTowards(g.x, g.y, tx, ty);
+    }
+  });
+}
+
+// ==================== Draw ====================
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Camera
+  let camX = player.x * TILE - canvas.width / 2;
+  let camY = player.y * TILE - canvas.height / 2;
+
+  camX = Math.max(0, Math.min(camX, maze[0].length*TILE - canvas.width));
+  camY = Math.max(0, Math.min(camY, maze.length*TILE - canvas.height));
+
+  // Maze
+  for (let y=0; y<maze.length; y++) {
+    for (let x=0; x<maze[y].length; x++) {
+      if (maze[y][x] === "W") ctx.fillStyle = "#444";
+      else if (maze[y][x] === "G") ctx.fillStyle = "#0f0";
+      else continue;
+
+      ctx.fillRect(x*TILE - camX, y*TILE - camY, TILE, TILE);
+    }
+  }
+
+  // Player
+  ctx.fillStyle = "#0ff";
+  ctx.fillRect(player.x*TILE - camX, player.y*TILE - camY, TILE, TILE);
+
+  // Ghosts
+  ghosts.forEach(g => {
+    ctx.fillStyle = "white";
+    ctx.beginPath();
+    ctx.arc(g.x*TILE - camX + 16, g.y*TILE - camY + 16, 14, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  // UI
+  ctx.fillStyle = "white";
+  ctx.font = "20px Arial";
+  ctx.fillText(`Level: ${level}`, 20, 30);
+  ctx.fillText(`Ammo: ${ammo}`, 20, 60);
+}
+
+// ==================== States ====================
+function checkState() {
+  // Win
+  if (maze[player.y][player.x] === "G") {
+    alert("你逃出這一層鬼店！下一層更可怕…");
+    nextLevel();
+  }
+
+  // Lose
+  ghosts.forEach(g => {
+    if (g.x === player.x && g.y === player.y) {
+      alert("你被惡鬼包圍了！");
+      resetGame();
+    }
+  });
+}
+
+function nextLevel() {
+  level++;
+  ammo = 5;
+  player = { x: 1, y: 1 };
+  ghosts = [
+    { x: 10, y: 5, type: "chaser" },
+    { x: 15, y: 2, type: "predict" },
+    { x: 3,  y: 8, type: "flank" }
+  ];
+}
+
+function resetGame() {
+  level = 1;
+  ammo = 5;
+  player = { x: 1, y: 1 };
+}
+
+
+// ==================== Main Loop ====================
 function loop() {
-    ghostAI();
-    draw();
-    requestAnimationFrame(loop);
+  movePlayer();
+  ghostAI();
+  draw();
+  checkState();
+  requestAnimationFrame(loop);
 }
 
 loop();
-
 </script>
-</body>
-</html>
-
 
 
 

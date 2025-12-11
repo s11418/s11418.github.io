@@ -12,18 +12,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Labyrinth Hotel Escape - Web</title>
 <style>
-  body {
+  html,body {
+    height: 100%;
     margin: 0;
+  }
+  body {
     background: #000;
     overflow: hidden;
-}
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
   canvas {
+    /* 我保留白色邊框，若要移除可刪掉下行 */
     border: 3px solid #fff;
+    display: block;
   }
 </style>
 </head>
 <body>
-<canvas id="game"></canvas></canvas>
+<canvas id="game"></canvas>
 <script>
 // --- Maze Map (W = Wall, . = Floor, G = Goal) ---
 const maze = [
@@ -42,36 +50,115 @@ const maze = [
 
 const TILE = 32;
 const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+// Resize canvas to fill window
 function resizeCanvas() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
 }
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
-const ctx = canvas.getContext("2d");
 
 let player = { x: 1, y: 1 };
-let ghost = { x: 10, y: 5, mode: "patrol", timer: 0 };
+let ghost = { x: 10, y: 5, mode: "patrol", timer: 0, frame: 0 };
 
+// helper: check map bounds & passable
+function canMove(x, y) {
+  if (y < 0 || y >= maze.length) return false;
+  if (x < 0 || x >= maze[0].length) return false;
+  return maze[y][x] !== "W";
+}
+
+// Player keyboard (step movement)
+window.addEventListener("keydown", (e) => {
+  let nx = player.x;
+  let ny = player.y;
+  if (e.key === "ArrowUp" || e.key === "w") ny--;
+  else if (e.key === "ArrowDown" || e.key === "s") ny++;
+  else if (e.key === "ArrowLeft" || e.key === "a") nx--;
+  else if (e.key === "ArrowRight" || e.key === "d") nx++;
+
+  if (canMove(nx, ny)) {
+    player.x = nx;
+    player.y = ny;
+  }
+});
+
+// Simple ghost AI: tries to move toward player every N frames using greedy step
+function ghostAI() {
+  ghost.frame++;
+  const RATE = 12; // lower -> ghost moves more often
+  if (ghost.frame % RATE !== 0) return;
+
+  // simple greedy movement: prefer direction with larger delta
+  const dx = player.x - ghost.x;
+  const dy = player.y - ghost.y;
+  let moved = false;
+
+  if (Math.abs(dx) > Math.abs(dy)) {
+    const sx = Math.sign(dx);
+    if (canMove(ghost.x + sx, ghost.y)) {
+      ghost.x += sx; moved = true;
+    } else {
+      const sy = Math.sign(dy);
+      if (canMove(ghost.x, ghost.y + sy)) { ghost.y += sy; moved = true; }
+    }
+  } else {
+    const sy = Math.sign(dy);
+    if (canMove(ghost.x, ghost.y + sy)) {
+      ghost.y += sy; moved = true;
+    } else {
+      const sx = Math.sign(dx);
+      if (canMove(ghost.x + sx, ghost.y)) { ghost.x += sx; moved = true; }
+    }
+  }
+
+  // if can't move greedy, try a random valid neighbor (small chance)
+  if (!moved) {
+    const neighbors = [[1,0],[-1,0],[0,1],[0,-1]].filter(([ax,ay]) => canMove(ghost.x+ax, ghost.y+ay));
+    if (neighbors.length) {
+      const r = neighbors[Math.floor(Math.random()*neighbors.length)];
+      ghost.x += r[0]; ghost.y += r[1];
+    }
+  }
+}
+
+// Draw everything with camera (clamped or centered if map smaller than screen)
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // --- Camera center on player ---
-  // --- Camera center on player but clamped ---
+  const mapPixelW = maze[0].length * TILE;
+  const mapPixelH = maze.length * TILE;
+
+  // camera target: center on player (in pixels)
   let camX = player.x * TILE - canvas.width / 2 + TILE / 2;
   let camY = player.y * TILE - canvas.height / 2 + TILE / 2;
 
-  // Clamp so camera never shows too much empty space
-  camX = Math.max(0, Math.min(camX, maze[0].length * TILE - canvas.width));
-  camY = Math.max(0, Math.min(camY, maze.length * TILE - canvas.height));
+  // if map smaller than screen, center the map on screen
+  if (mapPixelW < canvas.width) {
+    camX = (mapPixelW - canvas.width) / 2;
+  } else {
+    camX = Math.max(0, Math.min(camX, mapPixelW - canvas.width));
+  }
+  if (mapPixelH < canvas.height) {
+    camY = (mapPixelH - canvas.height) / 2;
+  } else {
+    camY = Math.max(0, Math.min(camY, mapPixelH - canvas.height));
+  }
 
+  // optional debug: small red square at top-left of canvas (remove if not needed)
+  // ctx.fillStyle = "red"; ctx.fillRect(0,0,20,20);
+
+  // draw tiles
   for (let y = 0; y < maze.length; y++) {
     for (let x = 0; x < maze[y].length; x++) {
       const screenX = x * TILE - camX;
       const screenY = y * TILE - camY;
 
-      if (screenX < -TILE || screenX > canvas.width) continue;
-      if (screenY < -TILE || screenY > canvas.height) continue;
+      // skip tiles completely off-screen (micro-optimization)
+      if (screenX + TILE < 0 || screenX > canvas.width) continue;
+      if (screenY + TILE < 0 || screenY > canvas.height) continue;
 
       if (maze[y][x] === "W") {
         ctx.fillStyle = "#333";
@@ -79,15 +166,19 @@ function draw() {
       } else if (maze[y][x] === "G") {
         ctx.fillStyle = "#0f0";
         ctx.fillRect(screenX, screenY, TILE, TILE);
+      } else {
+        // floor (optional subtle color)
+        ctx.fillStyle = "#060606";
+        ctx.fillRect(screenX, screenY, TILE, TILE);
       }
     }
   }
 
-  // Player
+  // draw player
   ctx.fillStyle = "#0ff";
   ctx.fillRect(player.x * TILE - camX, player.y * TILE - camY, TILE, TILE);
 
-  // Ghost (Shadow Monster)
+  // draw ghost as shadow monster (centered)
   ctx.save();
   ctx.translate(ghost.x * TILE - camX + TILE/2, ghost.y * TILE - camY + TILE/2);
 
@@ -97,7 +188,7 @@ function draw() {
   ctx.arc(0, -6, 10, 0, Math.PI * 2);
   ctx.fill();
 
-  // body
+  // body (triangle)
   ctx.beginPath();
   ctx.moveTo(-12, 0);
   ctx.lineTo(0, 16);
@@ -108,24 +199,24 @@ function draw() {
   ctx.restore();
 }
 
-// --- Check Win & Lose ---
+// win/lose checks
 function checkState() {
   if (maze[player.y][player.x] === "G") {
-    alert("你成功逃出鬼店！");
+    setTimeout(()=> alert("你成功逃出鬼店！"), 10);
     reset();
   }
-
   if (player.x === ghost.x && player.y === ghost.y) {
-    alert("你被惡鬼抓到了！");
+    setTimeout(()=> alert("你被惡鬼抓到了！"), 10);
     reset();
   }
 }
 
 function reset() {
   player = { x: 1, y: 1 };
-  ghost = { x: 10, y: 5, timer: 0 };
+  ghost = { x: 10, y: 5, mode: "patrol", timer: 0, frame: 0 };
 }
 
+// main loop
 function loop() {
   ghostAI();
   draw();

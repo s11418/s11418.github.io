@@ -5,7 +5,119 @@
     <link rel="icon"href="icon.png.png">
   </head>
   <body>
-hello world
+# Escape Labyrinth Hotel - Prototype using pygame
+# Basic framework: player moving in maze, ghost patrolling.
+# NOTE: This is a simplified prototype. You may add assets, sounds, etc.
+
+import pygame
+import sys
+import random
+
+pygame.init()
+
+WIDTH, HEIGHT = 800, 600
+TILE = 40
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Labyrinth Hotel Prototype")
+clock = pygame.time.Clock()
+
+# Colors
+WHITE = (255,255,255)
+BLACK = (0,0,0)
+RED = (200,0,0)
+BLUE = (0,0,200)
+GREY = (80,80,80)
+
+# Simple map
+maze = [
+"#############################",
+"#S       #   G      #     E#",
+"### ##### # #### ## # ######",
+"#   #   #   #       #      #",
+"# ### ### ### ####### #### #",
+"#   #       H      # #     #",
+"# # ####### ####### # # ### #",
+"# #       #     #     #     #",
+"# ### ######### ##### #######",
+"#     #     #   #       #   #",
+"#############################",
+]
+
+player_pos = [1,1]
+ghost_pos = [10,1]
+hide_spots = []
+exit_pos = None
+walls = []
+
+for y,row in enumerate(maze):
+    for x,ch in enumerate(row):
+        if ch == '#':
+            walls.append((x,y))
+        if ch == 'S':
+            player_pos = [x,y]
+        if ch == 'G':
+            ghost_pos = [x,y]
+        if ch == 'H':
+            hide_spots.append((x,y))
+        if ch == 'E':
+            exit_pos = (x,y)
+
+def draw_maze():
+    for (x,y) in walls:
+        pygame.draw.rect(screen, GREY, (x*TILE, y*TILE, TILE, TILE))
+    for (hx,hy) in hide_spots:
+        pygame.draw.rect(screen, (0,100,0), (hx*TILE, hy*TILE, TILE, TILE))
+    if exit_pos:
+        pygame.draw.rect(screen, (200,200,0), (exit_pos[0]*TILE, exit_pos[1]*TILE, TILE, TILE))
+
+
+def move_entity(pos, dx, dy):
+    nx, ny = pos[0] + dx, pos[1] + dy
+    if (nx,ny) not in walls:
+        pos[0], pos[1] = nx, ny
+
+
+def ghost_ai():
+    # Random patrol
+    if random.random() < 0.02:
+        move = random.choice([(1,0),(-1,0),(0,1),(0,-1)])
+        move_entity(ghost_pos, move[0], move[1])
+
+running = True
+while running:
+    clock.tick(10)
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+
+    keys = pygame.key.get_pressed()
+    if keys[pygame.K_UP]: move_entity(player_pos,0,-1)
+    if keys[pygame.K_DOWN]: move_entity(player_pos,0,1)
+    if keys[pygame.K_LEFT]: move_entity(player_pos,-1,0)
+    if keys[pygame.K_RIGHT]: move_entity(player_pos,1,0)
+
+    ghost_ai()
+
+    screen.fill(BLACK)
+    draw_maze()
+
+    # Draw player
+    pygame.draw.rect(screen, BLUE, (player_pos[0]*TILE, player_pos[1]*TILE, TILE, TILE))
+    # Draw ghost
+    pygame.draw.rect(screen, RED, (ghost_pos[0]*TILE, ghost_pos[1]*TILE, TILE, TILE))
+
+    # Check collision
+    if player_pos == ghost_pos:
+        pygame.display.set_caption("Caught by the Caretaker!")
+
+    # Check exit
+    if tuple(player_pos) == exit_pos:
+        pygame.display.set_caption("You Escaped the Hotel!")
+
+    pygame.display.flip()
+
+pygame.quit()
+sys.exit()
 
 
 </script>

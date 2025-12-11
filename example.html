@@ -6,149 +6,587 @@
   </head>
   <body>
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="zh-Hant">
 <head>
-<meta charset="UTF-8">
-<title>Maze Game</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Labyrinth Hotel — Web</title>
 <style>
-    body { margin:0; overflow:hidden; background:black; }
-    canvas { display:block; }
+  html,body { height:100%; margin:0; background:#000; font-family: Arial, sans-serif; }
+  #game { display:block; width:100vw; height:100vh; }
+  /* UI overlay */
+  .overlay {
+    position: fixed;
+    left:0; top:0; right:0; bottom:0;
+    display:flex; align-items:center; justify-content:center;
+    background: rgba(0,0,0,0.6);
+    z-index: 20;
+    color: #fff;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .menu { background: rgba(30,30,30,0.95); padding:20px; border-radius:10px; text-align:center; }
+  .btn { padding:8px 14px; margin:6px; border-radius:6px; border: none; cursor:pointer; font-weight:600; }
+  .btn:active { transform: translateY(1px); }
+  .btn-easy { background:#2ecc71; color:#012; }
+  .btn-normal { background:#f1c40f; color:#111; }
+  .btn-hell { background:#e74c3c; color:#111; }
+  .small { font-size:13px; opacity:0.9; }
+  #hud { position: fixed; left:12px; top:12px; z-index:15; color:#fff; font-weight:600; text-shadow:0 0 6px #000; }
+  #hud div { margin-bottom:6px; }
 </style>
 </head>
 <body>
 
 <canvas id="game"></canvas>
 
+<!-- Start menu / difficulty selector -->
+<div id="menuOverlay" class="overlay">
+  <div class="menu">
+    <h2>迷跡旅館 — 選擇難度</h2>
+    <div class="small">控制：方向鍵移動，F 切換手電筒</div>
+    <div style="margin-top:12px">
+      <button class="btn btn-easy" onclick="startGame('EASY')">EASY</button>
+      <button class="btn btn-normal" onclick="startGame('NORMAL')">NORMAL</button>
+      <button class="btn btn-hell" onclick="startGame('HELL')">HELL</button>
+    </div>
+    <p class="small" style="margin-top:14px; opacity:0.9">每關會增加惡鬼數量。手電筒會限制你的視野，提升恐怖感。</p>
+  </div>
+</div>
+
+<!-- HUD -->
+<div id="hud" style="display:none;">
+  <div id="levelText">Level: 1</div>
+  <div id="difficultyText">Difficulty: NORMAL</div>
+  <div id="ghostText">Ghosts: 0</div>
+  <div id="tipText">手電筒: F（預設開）</div>
+</div>
+
 <script>
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+// ===================== Canvas & Resize =====================
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
 
-function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+function resizeCanvas(){
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
 }
-resize();
-window.addEventListener("resize", resize);
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
 
-const TILE = 32;
+// ===================== Config & State =====================
+const TILE = 24; // tile size (px) - smaller because map is large
+const MAP_COLS = 40;
+const MAP_ROWS = 40;
 
-let maze = [
-    "WWWWWWWWWWWWWWWWWWWW",
-    "W       W          W",
-    "W WWWWW W WWWWWW   W",
-    "W W   W W      W   W",
-    "W W G W W  G   W   W",
-    "W W   W W      W   W",
-    "W WWWWW WWWWWW W   W",
-    "W                G W",
-    "W   WWWW   WWWW    W",
-    "W   W        W     W",
-    "W   W   G    W     W",
-    "W   W        W     W",
-    "W   WWWW   WWWW    W",
-    "W                  W",
-    "W     G            W",
-    "W                  W",
-    "W             G    W",
-    "W                  W",
-    "W         G        W",
-    "WWWWWWWWWWWWWWWWWWWW"
-];
-
+let maze = []; // 2D array [row][col] with 'W' or '.'
 let player = { x:1, y:1 };
+let ghosts = []; // array of {x, y, type}
+let level = 1;
+let difficulty = 'NORMAL';
+let gameOver = false;
+let flashlightOn = true;
+let started = false;
 
-let ghosts = [];
-for (let y=0; y<maze.length; y++) {
-    for (let x=0; x<maze[y].length; x++) {
-        if (maze[y][x] === "G") {
-            ghosts.push({x, y});
-        }
-    }
-}
+// Difficulty parameters
+const DIFFICULTY = {
+  'EASY':   { baseGhosts: 2, ghostMoveInterval: 30, fov: 160 },
+  'NORMAL': { baseGhosts: 3, ghostMoveInterval: 18, fov: 130 },
+  'HELL':   { baseGhosts: 4, ghostMoveInterval: 10, fov: 100 }
+};
 
-let keys = {};
-window.addEventListener("keydown", e => keys[e.key] = true);
-window.addEventListener("keyup", e => keys[e.key] = false);
+// Timers
+let frameCount = 0;
+let lastGhostMoveFrame = 0;
 
-function movePlayer() {
-    let nx = player.x;
-    let ny = player.y;
+// HUD elements
+const menuOverlay = document.getElementById('menuOverlay');
+const hud = document.getElementById('hud');
+const levelText = document.getElementById('levelText');
+const difficultyText = document.getElementById('difficultyText');
+const ghostText = document.getElementById('ghostText');
 
-    if (keys["ArrowUp"]) ny--;
-    if (keys["ArrowDown"]) ny++;
-    if (keys["ArrowLeft"]) nx--;
-    if (keys["ArrowRight"]) nx++;
+// Key input
+const keys = {};
+window.addEventListener('keydown', e => { keys[e.key] = true; if (e.key === 'f' || e.key === 'F') flashlightOn = !flashlightOn; });
+window.addEventListener('keyup',   e => { keys[e.key] = false; });
 
-    if (maze[ny][nx] !== "W") {
-        player.x = nx;
-        player.y = ny;
-    }
-}
+// ===================== Maze Generator (randomized walk carve) =====================
+// We'll generate a maze that fills MAP_COLS x MAP_ROWS with walls and carved paths.
+// Algorithm: recursive backtracker on an odd-grid basis; adapt to even sizes by using interior cells.
 
-function moveGhosts() {
-    ghosts.forEach(g=>{
-        let dx = player.x - g.x;
-        let dy = player.y - g.y;
+function generateMaze(cols, rows) {
+  // initialize all walls
+  const grid = Array.from({length: rows}, () => Array(cols).fill('W'));
 
-        if (Math.abs(dx) > Math.abs(dy)) {
-            g.x += Math.sign(dx);
-        } else {
-            g.y += Math.sign(dy);
-        }
+  // We'll carve using recursive backtracker on cell positions with step=2
+  const stack = [];
+  const isCell = (x,y) => x>0 && x<cols && y>0 && y<rows;
 
-        // 阻擋穿牆
-        if (maze[g.y][g.x] === "W") {
-            // 走不動就不動
-            if (Math.abs(dx) > Math.abs(dy)) g.x -= Math.sign(dx);
-            else g.y -= Math.sign(dy);
-        }
-    });
-}
+  // start at (1,1)
+  const start = {x:1, y:1};
+  grid[start.y][start.x] = '.';
+  stack.push(start);
 
-function draw() {
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+  const dirs = [{x:2,y:0},{x:-2,y:0},{x:0,y:2},{x:0,y:-2}];
 
-    // --- CAMERA FOLLOW ---
-    let camX = player.x * TILE - canvas.width / 2;
-    let camY = player.y * TILE - canvas.height / 2;
+  while (stack.length) {
+    const cur = stack[stack.length - 1];
+    const neighbors = [];
 
-    camX = Math.max(0, Math.min(camX, maze[0].length*TILE - canvas.width));
-    camY = Math.max(0, Math.min(camY, maze.length*TILE - canvas.height));
-
-    // --- DRAW MAZE ---
-    for (let y=0; y<maze.length; y++) {
-        for (let x=0; x<maze[y].length; x++) {
-            if (maze[y][x] === "W") {
-                ctx.fillStyle = "#555";
-                ctx.fillRect(x*TILE - camX, y*TILE - camY, TILE, TILE);
-            }
-        }
+    for (const d of dirs) {
+      const nx = cur.x + d.x;
+      const ny = cur.y + d.y;
+      if (nx>0 && nx<cols && ny>0 && ny<rows && grid[ny][nx] === 'W') {
+        neighbors.push({x:nx, y:ny, between:{x:cur.x + d.x/2, y:cur.y + d.y/2}});
+      }
     }
 
-    // --- DRAW PLAYER ---
-    ctx.fillStyle = "cyan";
-    ctx.fillRect(player.x*TILE - camX, player.y*TILE - camY, TILE, TILE);
+    if (neighbors.length === 0) {
+      stack.pop();
+    } else {
+      const pick = neighbors[Math.floor(Math.random()*neighbors.length)];
+      // carve the between and the neighbor
+      grid[pick.between.y][pick.between.x] = '.';
+      grid[pick.y][pick.x] = '.';
+      stack.push({x: pick.x, y: pick.y});
+    }
+  }
 
-    // --- DRAW GHOSTS ---
-    ctx.fillStyle = "white";
-    ghosts.forEach(g=>{
-        ctx.beginPath();
-        ctx.arc(g.x*TILE - camX + 16, g.y*TILE - camY + 16, 14, 0, Math.PI*2);
-        ctx.fill();
-    });
+  // ensure border walls intact, set entrance and exit
+  grid[1][1] = '.';
+  grid[rows-2][cols-2] = '.'; // exit region
 
-    // --- GAME LOGIC ---
-    movePlayer();
-    moveGhosts();
-
-    requestAnimationFrame(draw);
+  return grid;
 }
 
-draw();
+// Helper to convert grid to map of 'W' or '.' strings
+function fillMaze() {
+  maze = generateMaze(MAP_COLS, MAP_ROWS);
+  // Place some additional open pockets randomly for complexity
+  for (let i=0;i<Math.floor((MAP_COLS*MAP_ROWS)/200);i++){
+    const rx = 2 + Math.floor(Math.random()*(MAP_COLS-4));
+    const ry = 2 + Math.floor(Math.random()*(MAP_ROWS-4));
+    maze[ry][rx] = '.';
+    maze[ry][rx+1] = '.';
+    maze[ry+1][rx] = '.';
+  }
+}
+
+// ===================== Spawn / Reset =====================
+function spawnPlayerAndGhosts() {
+  // player at start (1,1) or nearest open
+  player.x = 1; player.y = 1;
+  if (maze[player.y][player.x] === 'W') {
+    // find a nearby empty cell
+    outer: for (let y=1;y<MAP_ROWS-1;y++){
+      for (let x=1;x<MAP_COLS-1;x++){
+        if (maze[y][x]==='.') { player.x=x; player.y=y; break outer; }
+      }
+    }
+  }
+
+  // ghosts: base count depends on difficulty + level-1
+  const base = DIFFICULTY[difficulty].baseGhosts;
+  const count = base + (level - 1);
+  ghosts = [];
+
+  // spawn ghosts at random far-away open tiles
+  for (let i=0;i<count;i++){
+    let gx, gy, attempts=0;
+    do {
+      gx = 2 + Math.floor(Math.random()*(MAP_COLS-4));
+      gy = 2 + Math.floor(Math.random()*(MAP_ROWS-4));
+      attempts++;
+      if (attempts>400) break;
+    } while (maze[gy][gx] === 'W' || (Math.abs(gx-player.x)+Math.abs(gy-player.y)) < 12);
+    ghosts.push({ x: gx, y: gy, vx:0, vy:0, lastMove: 0, type: 'demon' });
+  }
+
+  // update HUD
+  ghostText.textContent = `Ghosts: ${ghosts.length}`;
+  levelText.textContent = `Level: ${level}`;
+  difficultyText.textContent = `Difficulty: ${difficulty}`;
+}
+
+// ===================== Utility =====================
+function isWalkable(x,y) {
+  return y>=0 && y<MAP_ROWS && x>=0 && x<MAP_COLS && maze[y][x] !== 'W';
+}
+
+// Simple greedy step towards target (prefers axis with larger delta)
+function stepTowards(g, tx, ty) {
+  const dx = tx - g.x;
+  const dy = ty - g.y;
+  if (Math.abs(dx) > Math.abs(dy)) {
+    const nx = g.x + Math.sign(dx);
+    if (isWalkable(nx, g.y)) return {x: nx, y: g.y};
+    const ny = g.y + Math.sign(dy);
+    if (isWalkable(g.x, ny)) return {x: g.x, y: ny};
+  } else {
+    const ny = g.y + Math.sign(dy);
+    if (isWalkable(g.x, ny)) return {x: g.x, y: ny};
+    const nx = g.x + Math.sign(dx);
+    if (isWalkable(nx, g.y)) return {x: nx, y: g.y};
+  }
+  return {x: g.x, y: g.y};
+}
+
+// ===================== Drawing =====================
+function worldToScreen(wx, wy, camX, camY) {
+  return { sx: wx * TILE - camX, sy: wy * TILE - camY };
+}
+
+function drawDemon(gx, gy, camX, camY, t) {
+  // demon drawing: red body, horns, eyes; t used for small breathing animation
+  const screenX = gx * TILE - camX + TILE/2;
+  const screenY = gy * TILE - camY + TILE/2;
+
+  // body (ellipse, pulsing)
+  const pulse = 1 + 0.03 * Math.sin(t/10);
+  ctx.fillStyle = '#b51212';
+  ctx.beginPath();
+  ctx.ellipse(screenX, screenY + 6, 14 * pulse, 18 * pulse, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // head
+  ctx.beginPath();
+  ctx.fillStyle = '#e31b1b';
+  ctx.arc(screenX, screenY - 8, 12 * pulse, 0, Math.PI*2);
+  ctx.fill();
+
+  // horns
+  ctx.fillStyle = '#ff6b6b';
+  ctx.beginPath();
+  ctx.moveTo(screenX - 8, screenY - 14);
+  ctx.lineTo(screenX - 4, screenY - 26);
+  ctx.lineTo(screenX - 2, screenY - 12);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(screenX + 8, screenY - 14);
+  ctx.lineTo(screenX + 4, screenY - 26);
+  ctx.lineTo(screenX + 2, screenY - 12);
+  ctx.closePath();
+  ctx.fill();
+
+  // eyes
+  ctx.fillStyle = 'black';
+  ctx.beginPath();
+  ctx.arc(screenX - 5, screenY - 10, 2.6 * pulse, 0, Math.PI*2);
+  ctx.arc(screenX + 5, screenY - 10, 2.6 * pulse, 0, Math.PI*2);
+  ctx.fill();
+
+  // small glow ring
+  const grad = ctx.createRadialGradient(screenX, screenY, 6, screenX, screenY, 40);
+  grad.addColorStop(0, 'rgba(227,27,27,0.14)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(screenX, screenY, 40, 0, Math.PI*2);
+  ctx.fill();
+}
+
+// flashlight mask: draw a dark fullscreen then cut a radial gradient around player
+function drawFlashlight(px, py, camX, camY) {
+  ctx.save();
+  // full dark
+  ctx.fillStyle = 'rgba(0,0,0,0.95)';
+  ctx.fillRect(0,0,canvas.width, canvas.height);
+
+  // composite out the light circle
+  ctx.globalCompositeOperation = 'destination-out';
+  const fov = DIFFICULTY[difficulty].fov;
+  const grad = ctx.createRadialGradient(
+    px * TILE - camX + TILE/2,
+    py * TILE - camY + TILE/2,
+    Math.max(12, fov*0.25),
+    px * TILE - camX + TILE/2,
+    py * TILE - camY + TILE/2,
+    fov
+  );
+  grad.addColorStop(0, 'rgba(0,0,0,1)');
+  grad.addColorStop(0.5, 'rgba(0,0,0,0.6)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(px * TILE - camX + TILE/2, py * TILE - camY + TILE/2, fov, 0, Math.PI*2);
+  ctx.fill();
+
+  // restore normal composite mode
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.restore();
+}
+
+// ===================== Update & Draw Loop =====================
+function drawFrame() {
+  frameCount++;
+
+  // camera follows player but clamped
+  let camX = player.x * TILE - canvas.width / 2;
+  let camY = player.y * TILE - canvas.height / 2;
+  camX = Math.max(0, Math.min(camX, MAP_COLS*TILE - canvas.width));
+  camY = Math.max(0, Math.min(camY, MAP_ROWS*TILE - canvas.height));
+
+  // clear background (floor)
+  ctx.fillStyle = '#080808';
+  ctx.fillRect(0,0,canvas.width, canvas.height);
+
+  // draw maze tiles (walls)
+  for (let y=0;y<MAP_ROWS;y++){
+    for (let x=0;x<MAP_COLS;x++){
+      const ch = maze[y][x];
+      if (ch === 'W') {
+        const screenX = x*TILE - camX, screenY = y*TILE - camY;
+        // wall tile
+        ctx.fillStyle = '#333';
+        ctx.fillRect(screenX, screenY, TILE, TILE);
+        // subtle highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.02)';
+        ctx.fillRect(screenX+2, screenY+2, TILE-4, TILE-4);
+      }
+    }
+  }
+
+  // draw exit indicator at bottom-right cell
+  const exitX = MAP_COLS-2, exitY = MAP_ROWS-2;
+  const ex = exitX*TILE - camX, ey = exitY*TILE - camY;
+  ctx.fillStyle = '#2ecc71';
+  ctx.fillRect(ex+4, ey+4, TILE-8, TILE-8);
+
+  // draw player
+  ctx.fillStyle = '#0ff';
+  ctx.fillRect(player.x*TILE - camX, player.y*TILE - camY, TILE, TILE);
+
+  // draw ghosts (demons)
+  ghosts.forEach(g => {
+    drawDemon(g.x, g.y, camX, camY, frameCount);
+  });
+
+  // overlay flashlight (if on)
+  if (flashlightOn) {
+    drawFlashlight(player.x, player.y, camX, camY);
+  } else {
+    // if flashlight off, full dark overlay (still allow minimal ambient)
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+  }
+
+  // HUD draw on canvas optionally (we also have HTML HUD)
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.font = '14px Arial';
+  ctx.fillText(`Level: ${level}`, 12, 20);
+  ctx.fillText(`Ghosts: ${ghosts.length}`, 12, 40);
+  ctx.fillText(`F: 手電筒 (${flashlightOn ? 'ON' : 'OFF'})`, 12, 60);
+}
+
+// ===================== Game Logic (movement & ghost ticks) =====================
+function playerMoveTick() {
+  // simple tile-step player controlled by arrow keys
+  let nx = player.x, ny = player.y;
+  if (keys['ArrowUp']) ny--;
+  else if (keys['ArrowDown']) ny++;
+  else if (keys['ArrowLeft']) nx--;
+  else if (keys['ArrowRight']) nx++;
+
+  if (isWalkable(nx, ny)) {
+    player.x = nx; player.y = ny;
+  }
+}
+
+function ghostLogicTick() {
+  // only move ghosts on intervals determined by difficulty
+  const interval = DIFFICULTY[difficulty].ghostMoveInterval;
+  if (frameCount - lastGhostMoveFrame < interval) return;
+  lastGhostMoveFrame = frameCount;
+
+  // for each ghost, perform a behavior: greedy chase with slight variety
+  ghosts.forEach((g, idx) => {
+    // target = player, but we add behavior variety: some ghosts attempt to flank/predict
+    const dist = Math.abs(g.x - player.x) + Math.abs(g.y - player.y);
+
+    // choose behavior based on index (for variety)
+    if (idx % 3 === 0) {
+      // direct chase
+      const next = stepTowards(g, player.x, player.y);
+      g.x = next.x; g.y = next.y;
+    } else if (idx % 3 === 1) {
+      // predictive intercept: aim for next player cell
+      let tx = player.x, ty = player.y;
+      if (keys["ArrowUp"]) ty--;
+      else if (keys["ArrowDown"]) ty++;
+      else if (keys["ArrowLeft"]) tx--;
+      else if (keys["ArrowRight"]) tx++;
+      const next = stepTowards(g, tx, ty);
+      g.x = next.x; g.y = next.y;
+    } else {
+      // flank: try to move to position offset from player (semi-random)
+      const targetX = player.x + (player.y % 2 === 0 ? 2 : -2);
+      const targetY = player.y + (player.x % 2 === 0 ? 1 : -1);
+      const next = stepTowards(g, targetX, targetY);
+      g.x = next.x; g.y = next.y;
+    }
+
+    // ensure not walking into walls (stepTowards ensures it)
+    if (!isWalkable(g.x, g.y)) {
+      // stay still
+    }
+  });
+}
+
+// ===================== State checks =====================
+function checkWinLose() {
+  if (gameOver) return;
+
+  // win: reach exit cell
+  const exitX = MAP_COLS-2, exitY = MAP_ROWS-2;
+  if (player.x === exitX && player.y === exitY) {
+    gameOver = true;
+    // show PASS overlay
+    setTimeout(()=> {
+      alert('PASS！你通過了這一層！下一層更可怕…');
+      level++;
+      // regenerate maze and respawn with increased ghosts
+      startLevel();
+      gameOver = false;
+    }, 80);
+  }
+
+  // lose: any ghost on player's tile
+  for (const g of ghosts) {
+    if (g.x === player.x && g.y === player.y) {
+      gameOver = true;
+      setTimeout(()=> {
+        alert('你被惡鬼抓到了！遊戲結束');
+        // stop game — show menu to restart
+        showMenu();
+      }, 60);
+      break;
+    }
+  }
+}
+
+// ===================== Start / Restart / Level =====================
+function startLevel() {
+  fillMaze();
+  // ensure exit cell is clear
+  maze[MAP_ROWS-2][MAP_COLS-2] = '.';
+  spawnInitialEntities();
+  lastGhostMoveFrame = frameCount;
+}
+
+function spawnInitialEntities() {
+  // spawn player and ghosts for the current level
+  // player starts at first open cell
+  outer: for (let y=1;y<MAP_ROWS-1;y++){
+    for (let x=1;x<MAP_COLS-1;x++){
+      if (maze[y][x]==='.') { player.x=x; player.y=y; break outer; }
+    }
+  }
+
+  const base = DIFFICULTY[difficulty].baseGhosts;
+  const count = base + (level - 1);
+  ghosts = [];
+  for (let i=0;i<count;i++){
+    // find a spawn far from player
+    let gx, gy, attempts=0;
+    do {
+      gx = 2 + Math.floor(Math.random()*(MAP_COLS-4));
+      gy = 2 + Math.floor(Math.random()*(MAP_ROWS-4));
+      attempts++;
+      if (attempts>400) break;
+    } while (maze[gy][gx]==='W' || (Math.abs(gx-player.x)+Math.abs(gy-player.y)) < 10);
+    ghosts.push({x:gx, y:gy, type:'demon'});
+  }
+
+  // Update HUD
+  ghostText.textContent = `Ghosts: ${ghosts.length}`;
+  levelText.textContent = `Level: ${level}`;
+  difficultyText.textContent = `Difficulty: ${difficulty}`;
+  hud.style.display = 'block';
+}
+
+// ===================== Menu / Start =====================
+function showMenu() {
+  started = false;
+  menuOverlay.style.display = 'flex';
+  hud.style.display = 'none';
+  gameOver = true;
+}
+
+function startGame(diff) {
+  difficulty = diff || 'NORMAL';
+  level = 1;
+  frameCount = 0;
+  lastGhostMoveFrame = 0;
+  menuOverlay.style.display = 'none';
+  hud.style.display = 'block';
+  started = true;
+  gameOver = false;
+  fillMaze();
+  spawnInitialEntities();
+  // start loop if not already
+}
+
+// ===================== Main Loop =====================
+function mainLoop() {
+  if (!started) {
+    requestAnimationFrame(mainLoop);
+    return;
+  }
+  if (!gameOver) {
+    playerMoveTick();
+    // Player movement tick is continuous; we used keys during playerMoveTick
+    ghostLogicTick();
+  }
+
+  drawFrame();
+  checkWinLose();
+
+  requestAnimationFrame(mainLoop);
+}
+
+// helper to call player movement tick with step behaviour (avoid too-fast)
+let lastPlayerMove = 0;
+function playerMoveTick() {
+  // limit steps per frames for smoother tile stepping
+  const now = frameCount;
+  const stepInterval = 6; // lower -> player moves faster
+  if (now - lastPlayerMove < stepInterval) return;
+  lastPlayerMove = now;
+  // use keys directly
+  let nx = player.x, ny = player.y;
+  if (keys['ArrowUp']) ny--;
+  else if (keys['ArrowDown']) ny++;
+  else if (keys['ArrowLeft']) nx--;
+  else if (keys['ArrowRight']) nx++;
+
+  if (isWalkable(nx, ny)) {
+    player.x = nx; player.y = ny;
+  }
+}
+
+// ===================== Initialization =====================
+function init() {
+  fillMaze();
+  spawnInitialEntities();
+  mainLoop();
+}
+
+init(); // generate once
+
+// Start the main RAF loop and frame counter
+(function frameRunner(){
+  frameCount++;
+  requestAnimationFrame(frameRunner);
+})();
+requestAnimationFrame(mainLoop);
+
 </script>
-
 </body>
 </html>
+<
 
 
 

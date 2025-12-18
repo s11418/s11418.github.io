@@ -148,39 +148,56 @@ function spawnGhosts(){
     ghosts.push({x:gx, y:gy, type:i%2===0?'skull':'wave', stunUntil:0});
   }
 }
+  function getNearestGhosts(count) {
+  return ghosts
+    .filter(g => performance.now() >= g.stunUntil) // 不鎖暈的鬼
+    .map(g => {
+      const dx = (g.x + 0.5) - (player.x + 0.5);
+      const dy = (g.y + 0.5) - (player.y + 0.5);
+      return { g, dist: Math.hypot(dx, dy) };
+    })
+    .sort((a, b) => a.dist - b.dist)
+    .slice(0, count)
+    .map(o => o.g);
+}
+
 
 // ------------------- Shooting -------------------
 function shoot(){
   if (ammo <= 0) return;
 
-  const target = getNearestGhost();
-  if (!target) return; // 沒鬼不射
+  // 最多鎖 3 隻鬼（鬼少就鎖少）
+  const targets = getNearestGhosts(3);
+  if (targets.length === 0) return;
 
   ammo--;
   updateHUD();
 
   const px = player.x + 0.5;
   const py = player.y + 0.5;
-  const gx = target.x + 0.5;
-  const gy = target.y + 0.5;
-
-  let dx = gx - px;
-  let dy = gy - py;
-  const len = Math.hypot(dx, dy) || 1;
-
-  dx /= len;
-  dy /= len;
-
   const speed = 0.6;
 
-  bullets.push({
-    x: px,
-    y: py,
-    dx: dx * speed,
-    dy: dy * speed,
-    ttl: 25
+  targets.forEach(target => {
+    const gx = target.x + 0.5;
+    const gy = target.y + 0.5;
+
+    let dx = gx - px;
+    let dy = gy - py;
+    const len = Math.hypot(dx, dy) || 1;
+
+    dx /= len;
+    dy /= len;
+
+    bullets.push({
+      x: px,
+      y: py,
+      dx: dx * speed,
+      dy: dy * speed,
+      ttl: 25
+    });
   });
 }
+
 
 
 // ------------------- Game Loop -------------------

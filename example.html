@@ -150,18 +150,38 @@ function spawnGhosts(){
 }
 
 // ------------------- Shooting -------------------
-document.addEventListener('keydown',e=>{
-  if(e.key===' ' && started && !gameOver){ e.preventDefault(); tryShoot(); }
-});
+function shoot(){
+  if (ammo <= 0) return;
 
-function tryShoot(){
-  if(ammo<=0) return;
-  ammo--; 
+  const target = getNearestGhost();
+  if (!target) return; // 沒鬼不射
+
+  ammo--;
   updateHUD();
-  bullets.push({x:player.x+0.5, y:player.y+0.5, dx:0, dy:-0.5, ttl:20});
-  bullets.push({x:player.x+0.5, y:player.y+0.5, dx:0.5, dy:-0.25, ttl:20});
-  bullets.push({x:player.x+0.5, y:player.y+0.5, dx:-0.5, dy:-0.25, ttl:20});
+
+  const px = player.x + 0.5;
+  const py = player.y + 0.5;
+  const gx = target.x + 0.5;
+  const gy = target.y + 0.5;
+
+  let dx = gx - px;
+  let dy = gy - py;
+  const len = Math.hypot(dx, dy) || 1;
+
+  dx /= len;
+  dy /= len;
+
+  const speed = 0.6;
+
+  bullets.push({
+    x: px,
+    y: py,
+    dx: dx * speed,
+    dy: dy * speed,
+    ttl: 25
+  });
 }
+
 
 // ------------------- Game Loop -------------------
 let lastMove=0;

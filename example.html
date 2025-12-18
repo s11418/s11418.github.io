@@ -8,9 +8,9 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>迷跡旅館 — 完整版</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Labyrinth Hotel — Web</title>
 <style>
 html,body{height:100%;margin:0;background:#000;font-family:Arial,sans-serif}
 canvas{display:block;width:100vw;height:100vh}
@@ -29,14 +29,14 @@ canvas{display:block;width:100vw;height:100vh}
 <div id="menuOverlay" class="overlay">
   <div class="menu">
     <h2>迷跡旅館 — 選擇難度</h2>
-    <div id="controls" style="margin-bottom:8px">控制：方向鍵/WASD移動，空白鍵射擊（嚇退鬼），F 切換手電筒</div>
+    <div id="controls" style="margin-bottom:8px">控制：方向鍵移動，空白鍵射擊（擊退鬼）</div>
     <div>
       <button class="btn btn-easy" onclick="startGame('EASY')">EASY</button>
       <button class="btn btn-normal" onclick="startGame('NORMAL')">NORMAL</button>
       <button class="btn btn-hard" onclick="startGame('HARD')">HARD</button>
       <button class="btn btn-hell" onclick="startGame('HELL')">HELL</button>
     </div>
-    <div id="infoSmall">EASY 3 發 / NORMAL 4 發 / HARD 6 發 / HELL 8 發。射完後每 30 秒補一發，最多為該難度上限。</div>
+    <div id="infoSmall">EASY: 鬼3 / NORMAL: 鬼4 / HARD: 鬼6 / HELL: 鬼8，每關每30秒回1發子彈。</div>
   </div>
 </div>
 
@@ -45,47 +45,47 @@ canvas{display:block;width:100vw;height:100vh}
   <div id="diffText">Difficulty: NORMAL</div>
   <div id="ammoText">Ammo: 0 / 0</div>
   <div id="ghostText">Ghosts: 0</div>
-  <div id="tipText">F: 手電筒 切換</div>
 </div>
 
 <script>
+// ------------------- Canvas & Resize -------------------
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 function resize(){ canvas.width = innerWidth; canvas.height = innerHeight; }
-addEventListener('resize', resize); resize();
+addEventListener('resize', resize);
+resize();
 
+// ------------------- Config -------------------
 const TILE = 28;
 const MAP_COLS = 40;
 const MAP_ROWS = 40;
-
 const DIFF = {
-  'EASY':   { maxAmmo: 3,  ghostCount:3, ghostSpeed:2500 },
-  'NORMAL': { maxAmmo: 4,  ghostCount:4, ghostSpeed:1800 },
-  'HARD':   { maxAmmo: 6,  ghostCount:6, ghostSpeed:1200 },
-  'HELL':   { maxAmmo: 8,  ghostCount:8, ghostSpeed:1000 }
+  'EASY': { maxAmmo: 3, ghostCount: 3 },
+  'NORMAL': { maxAmmo: 5, ghostCount: 4 },
+  'HARD': { maxAmmo: 8, ghostCount: 6 },
+  'HELL': { maxAmmo: 8, ghostCount: 8 }
 };
 
-let maze=[], player={x:1,y:1}, ghosts=[], bullets=[];
-let level=1, difficulty='NORMAL', started=false, flashlightOn=true, gameOver=false;
-let ammo=0, lastAmmoRegen=0;
+// ------------------- State -------------------
+let maze=[],player={x:1,y:1},ghosts=[],level=1,difficulty='NORMAL',started=false,gameOver=false;
+let ammo=0,lastAmmoRegen=0,lastShootTime=0,SHOOT_COOLDOWN=300,lastMoveTick=0;
 
-const menuOverlay = document.getElementById('menuOverlay');
-const hud = document.getElementById('hud');
-const levelText = document.getElementById('levelText');
-const diffText = document.getElementById('diffText');
-const ammoText = document.getElementById('ammoText');
-const ghostText = document.getElementById('ghostText');
+// HUD
+const menuOverlay=document.getElementById('menuOverlay');
+const hud=document.getElementById('hud');
+const levelText=document.getElementById('levelText');
+const diffText=document.getElementById('diffText');
+const ammoText=document.getElementById('ammoText');
+const ghostText=document.getElementById('ghostText');
 
+// input
 const keys={};
-addEventListener('keydown', e=>{
-  keys[e.key]=true;
-  if(e.key==='f'||e.key==='F') flashlightOn=!flashlightOn;
-  if(e.key===' ') tryShoot();
-});
-addEventListener('keyup', e=>{ keys[e.key]=false; });
+addEventListener('keydown',e=>{ keys[e.key]=true; });
+addEventListener('keyup',e=>keys[e.key]=false);
 
+// ------------------- Maze -------------------
 function generateMaze(cols,rows){
-  const grid = Array.from({length:rows},()=>Array(cols).fill('W'));
+  const grid=Array.from({length:rows},()=>Array(cols).fill('W'));
   function carve(x,y){
     grid[y][x]='.';
     const dirs=[{x:2,y:0},{x:-2,y:0},{x:0,y:2},{x:0,y:-2}].sort(()=>Math.random()-0.5);
@@ -97,45 +97,210 @@ function generateMaze(cols,rows){
       }
     }
   }
-  carve(1,1); grid[1][1]='.'; grid[rows-2][cols-2]='.';
+  carve(1,1);
+  grid[1][1]='.'; grid[rows-2][cols-2]='.';
   return grid;
 }
 
+// ------------------- Spawn -------------------
+function spawnEntities(){
+  player.x=1; player.y=1;
+  outer: for(let y=1;y<MAP_ROWS-1;y++){
+    for(let x=1;x<MAP_COLS-1;x++){
+      if(maze[y][x]==='.') { player.x=x; player.y=y; break outer; }
+    }
+  }
+  ghosts=[];
+  const count=DIFF[difficulty].ghostCount;
+  for(let i=0;i<count;i++){
+    let gx,gy,attempts=0;
+    do{
+      gx=2+Math.floor(Math.random()*(MAP_COLS-4));
+      gy=2+Math.floor(Math.random()*(MAP_ROWS-4));
+      attempts++; if(attempts>500) break;
+    }while(maze[gy][gx]==='.'===false || (Math.abs(gx-player.x)+Math.abs(gy-player.y))<10);
+    const type=(i%2===0)?'skull':'wave';
+    ghosts.push({x:gx,y:gy,type:type,stunUntil:0});
+  }
+  updateHUD();
+}
+
+// ------------------- Utilities -------------------
 function isWalkable(x,y){ return y>=0 && y<MAP_ROWS && x>=0 && x<MAP_COLS && maze[y][x]==='.'; }
 function clamp(n,a,b){ return Math.max(a,Math.min(b,n)); }
 
-function spawnGhosts(){
-  ghosts=[];
-  let placed=0;
-  while(placed<DIFF[difficulty].ghostCount){
-    let gx=2+Math.floor(Math.random()*(MAP_COLS-4));
-    let gy=2+Math.floor(Math.random()*(MAP_ROWS-4));
-    if(isWalkable(gx,gy) && (Math.abs(gx-1)+Math.abs(gy-1)>6) && (Math.abs(gx-(MAP_COLS-2))+Math.abs(gy-(MAP_ROWS-2))>6)){
-      const type = placed%2===0?'skull':'wave';
-      ghosts.push({x:gx,y:gy,type,stunUntil:0,lastMove:0});
-      placed++;
+// ------------------- Shooting -------------------
+function tryShoot(){
+  const now=performance.now();
+  if(now-lastShootTime<SHOOT_COOLDOWN) return;
+  if(ammo<=0) return;
+  lastShootTime=now; ammo--; updateHUD();
+  ghosts.forEach(g=>{
+    if(g.stunUntil>now) return;
+    const d=Math.abs(Math.round(g.x)-player.x)+Math.abs(Math.round(g.y)-player.y);
+    if(d<=2){
+      const dx=Math.sign(g.x-player.x), dy=Math.sign(g.y-player.y);
+      for(let step=0;step<2;step++){
+        const nx=Math.round(g.x)+dx, ny=Math.round(g.y)+dy;
+        if(isWalkable(nx,ny)){ g.x=nx; g.y=ny; }
+        else break;
+      }
+      g.stunUntil=now+1500;
+    }
+  });
+}
+addEventListener('keydown', e=>{ if(e.key===' '){ tryShoot(); e.preventDefault(); }});
+
+// ------------------- Draw -------------------
+function drawWave(x,y,t){
+  const sx=x*TILE, sy=y*TILE;
+  ctx.fillStyle='#e33';
+  ctx.beginPath(); ctx.arc(sx+TILE/2,sy+TILE/2,12,0,Math.PI*2); ctx.fill();
+}
+function drawSkull(x,y,t){
+  const sx=x*TILE, sy=y*TILE;
+  ctx.fillStyle='#b10';
+  ctx.beginPath(); ctx.ellipse(sx+TILE/2,sy+TILE/2,14,16,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#e22';
+  ctx.beginPath(); ctx.arc(sx+TILE/2,sy+TILE/2-6,12,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='black';
+  ctx.beginPath(); ctx.arc(sx+TILE/2-5,sy+TILE/2-8,3,0,Math.PI*2);
+  ctx.arc(sx+TILE/2+5,sy+TILE/2-8,3,0,Math.PI*2);
+  ctx.fill();
+}
+
+// ------------------- Draw Frame -------------------
+let frame=0;
+function drawFrame(){
+  frame++;
+  let camX=player.x*TILE-canvas.width/2;
+  let camY=player.y*TILE-canvas.height/2;
+  camX=clamp(camX,0,MAP_COLS*TILE-canvas.width);
+  camY=clamp(camY,0,MAP_ROWS*TILE-canvas.height);
+
+  // draw map
+  for(let y=0;y<MAP_ROWS;y++){
+    for(let x=0;x<MAP_COLS;x++){
+      const ch=maze[y][x];
+      const sx=x*TILE-camX, sy=y*TILE-camY;
+      ctx.fillStyle=(ch==='W')?'#444':'#222';
+      ctx.fillRect(sx,sy,TILE,TILE);
+    }
+  }
+
+  // exit
+  const exitX=MAP_COLS-2, exitY=MAP_ROWS-2;
+  ctx.fillStyle='#2ecc71';
+  ctx.fillRect(exitX*TILE-camX+6, exitY*TILE-camY+6, TILE-12, TILE-12);
+
+  // player
+  ctx.fillStyle='#0ff';
+  ctx.fillRect(player.x*TILE-camX,player.y*TILE-camY,TILE,TILE);
+
+  // ghosts
+  const now=performance.now();
+  ghosts.forEach(g=>{
+    ctx.globalAlpha=(g.stunUntil>now)?0.6:1.0;
+    if(g.type==='wave') drawWave(g.x,g.y,frame);
+    else drawSkull(g.x,g.y,frame);
+    ctx.globalAlpha=1.0;
+  });
+
+  // HUD canvas
+  ctx.fillStyle='white';
+  ctx.font='14px Arial';
+  ctx.fillText(`Level: ${level}`,12,20);
+  ctx.fillText(`Ammo: ${ammo} / ${DIFF[difficulty].maxAmmo}`,12,40);
+  ctx.fillText(`Ghosts: ${ghosts.length}`,12,60);
+}
+
+// ------------------- Movement / AI -------------------
+let lastGhostTick=0;
+function gameTick(){
+  const now=performance.now();
+  // player movement
+  if(!gameOver){
+    if(keys['ArrowUp']||keys['w']) tryStep(0,-1);
+    if(keys['ArrowDown']||keys['s']) tryStep(0,1);
+    if(keys['ArrowLeft']||keys['a']) tryStep(-1,0);
+    if(keys['ArrowRight']||keys['d']) tryStep(1,0);
+  }
+
+  // ghost tick (slow)
+  if(now-lastGhostTick>500 && !gameOver){
+    lastGhostTick=now;
+    ghosts.forEach((g,idx)=>{
+      if(g.stunUntil>now) return;
+      const role=idx%2;
+      let tx=player.x, ty=player.y;
+      if(role===0){ // chaser
+        const next=stepTowards(g.x,g.y,player.x,player.y);
+        g.x=next.x; g.y=next.y;
+      }else{ // flank
+        const offsetX=(player.y%2===0)?2:-2;
+        const offsetY=(player.x%2===0)?1:-1;
+        const next=stepTowards(g.x,g.y,player.x+offsetX,player.y+offsetY);
+        g.x=next.x; g.y=next.y;
+      }
+    });
+  }
+
+  // ammo regen every 30 sec
+  if(now-lastAmmoRegen>30000){
+    lastAmmoRegen=now;
+    if(ammo<DIFF[difficulty].maxAmmo) { ammo++; updateHUD(); }
+  }
+
+  // check win/lose
+  checkWinLose();
+}
+
+function stepTowards(x,y,tx,ty){
+  const dx=tx-x, dy=ty-y;
+  if(Math.abs(dx)>Math.abs(dy)){
+    const nx=x+Math.sign(dx); if(isWalkable(nx,y)) return {x:nx,y};
+    const ny=y+Math.sign(dy); if(isWalkable(x,ny)) return {x,y:ny};
+  }else{
+    const ny=y+Math.sign(dy); if(isWalkable(x,ny)) return {x,y:ny};
+    const nx=x+Math.sign(dx); if(isWalkable(nx,y)) return {x:nx,y};
+  }
+  return {x,y};
+}
+
+function tryStep(dx,dy){
+  const now=performance.now();
+  if(now-lastMoveTick<120) return;
+  lastMoveTick=now;
+  const nx=player.x+dx, ny=player.y+dy;
+  if(isWalkable(nx,ny)) player.x=nx,player.y=ny;
+}
+
+// ------------------- Win / Lose -------------------
+function checkWinLose(){
+  if(gameOver) return;
+  const exitX=MAP_COLS-2, exitY=MAP_ROWS-2;
+  if(player.x===exitX && player.y===exitY){
+    gameOver=true;
+    setTimeout(()=>{
+      alert('PASS！你通過了這一層！');
+      level++;
+      startLevel();
+      gameOver=false;
+    },80);
+  }
+  for(const g of ghosts){
+    if(Math.round(g.x)===player.x && Math.round(g.y)===player.y){
+      gameOver=true;
+      setTimeout(()=>{
+        alert('你被惡鬼抓到了！遊戲結束');
+        showMenu();
+      },60);
+      break;
     }
   }
 }
 
-function startLevel(){
-  maze=generateMaze(MAP_COLS,MAP_ROWS);
-  player.x=1; player.y=1;
-  spawnGhosts();
-  ammo=DIFF[difficulty].maxAmmo;
-  lastAmmoRegen=performance.now();
-  updateHUD();
-}
-
-function startGame(diff){
-  difficulty=diff||'NORMAL'; level=1;
-  menuOverlay.style.display='none'; hud.style.display='block';
-  started=true; gameOver=false;
-  startLevel();
-}
-
-function showMenu(){ started=false; menuOverlay.style.display='flex'; hud.style.display='none'; gameOver=true; }
-
+// ------------------- HUD -------------------
 function updateHUD(){
   ammoText.textContent=`Ammo: ${ammo} / ${DIFF[difficulty].maxAmmo}`;
   ghostText.textContent=`Ghosts: ${ghosts.length}`;
@@ -143,158 +308,38 @@ function updateHUD(){
   diffText.textContent=`Difficulty: ${difficulty}`;
 }
 
-let lastMoveTick=0;
-function tryMove(dx,dy){
-  const now=performance.now();
-  if(now-lastMoveTick<120) return;
-  lastMoveTick=now;
-  const nx=player.x+dx, ny=player.y+dy;
-  if(isWalkable(nx,ny)) player.x=nx, player.y=ny;
+// ------------------- Start / Menu -------------------
+function showMenu(){ started=false; menuOverlay.style.display='flex'; hud.style.display='none'; gameOver=true; }
+function startGame(diff){
+  difficulty=diff||'NORMAL';
+  level=1;
+  menuOverlay.style.display='none';
+  hud.style.display='block';
+  started=true;
+  gameOver=false;
+  startLevel();
+  updateHUD();
 }
-
-function stepTowards(x,y,tx,ty){ //簡單貪婪
-  const dx=tx-x, dy=ty-y;
-  if(Math.abs(dx)>Math.abs(dy)){
-    if(isWalkable(x+Math.sign(dx),y)) return {x:x+Math.sign(dx),y};
-    if(isWalkable(x,y+Math.sign(dy))) return {x,y:y+Math.sign(dy)};
-  } else {
-    if(isWalkable(x,y+Math.sign(dy))) return {x,y:y+Math.sign(dy)};
-    if(isWalkable(x+Math.sign(dx),y)) return {x:x+Math.sign(dx),y};
-  }
-  return {x,y};
-}
-
-// ----------- 子彈系統 ----------
-const bulletSpeed=8;
-function tryShoot(){
-  if(ammo<=0) return;
-  ammo--; updateHUD();
-  bullets.push({x:player.x+0.5,y:player.y+0.5,dx:0,dy:0});
-}
-
-// ----------- 繪圖 ----------
-let frame=0;
-function drawGhost(g,camX,camY){
-  const sx=g.x*TILE-camX+TILE/2;
-  const sy=g.y*TILE-camY+TILE/2;
-  ctx.save(); ctx.translate(sx,sy);
-  if(g.type==='skull'){
-    ctx.fillStyle='#e22';
-    ctx.beginPath(); ctx.arc(0,-6,12,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='#b10'; ctx.beginPath(); ctx.ellipse(0,6,14,16,0,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='black'; ctx.beginPath(); ctx.arc(-5,-8,3,0,Math.PI*2); ctx.arc(5,-8,3,0,Math.PI*2); ctx.fill();
-  } else {
-    ctx.fillStyle='#e33';
-    ctx.beginPath(); ctx.arc(0,-6,12,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='#b11'; ctx.beginPath();
-    ctx.moveTo(-14,8);
-    for(let i=-14;i<=14;i+=7) ctx.quadraticCurveTo(i,18+Math.sin((i+frame)/6)*4,i+7,8);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle='black'; ctx.beginPath(); ctx.arc(-5,-8,2.5,0,Math.PI*2); ctx.arc(5,-8,2.5,0,Math.PI*2); ctx.fill();
-  }
-  ctx.restore();
-}
-
-function drawFrame(){
-  frame++;
-  let camX=player.x*TILE-canvas.width/2, camY=player.y*TILE-canvas.height/2;
-  camX=clamp(camX,0,MAP_COLS*TILE-canvas.width);
-  camY=clamp(camY,0,MAP_ROWS*TILE-canvas.height);
-
-  ctx.fillStyle='#1a1a1a'; ctx.fillRect(0,0,canvas.width,canvas.height);
-  for(let y=0;y<MAP_ROWS;y++){
-    for(let x=0;x<MAP_COLS;x++){
-      const ch=maze[y][x];
-      const sx=x*TILE-camX, sy=y*TILE-camY;
-      ctx.fillStyle=ch==='W'?'#444':'#222'; ctx.fillRect(sx,sy,TILE,TILE);
-    }
-  }
-
-  ctx.fillStyle='#2ecc71'; ctx.fillRect((MAP_COLS-2)*TILE-camX+6,(MAP_ROWS-2)*TILE-camY+6,TILE-12,TILE-12);
-  ctx.fillStyle='#0ff'; ctx.fillRect(player.x*TILE-camX,player.y*TILE-camY,TILE,TILE);
-
-  ghosts.forEach(g=>{
-    ctx.globalAlpha=(g.stunUntil>performance.now())?0.6:1.0;
-    drawGhost(g,camX,camY);
-  });
-  ctx.globalAlpha=1.0;
-
-  bullets.forEach(b=>{
-    ctx.fillStyle='yellow';
-    const bx=b.x*TILE-camX, by=b.y*TILE-camY;
-    ctx.beginPath(); ctx.arc(bx,by,4,0,Math.PI*2); ctx.fill();
-  });
-
-  // flashlight
-  if(flashlightOn){
-    ctx.fillStyle='rgba(0,0,0,0.45)'; ctx.fillRect(0,0,canvas.width,canvas.height);
-    const LIGHT=420, cx=player.x*TILE-camX+TILE/2, cy=player.y*TILE-camY+TILE/2;
-    const grad=ctx.createRadialGradient(cx,cy,LIGHT*0.05,cx,cy,LIGHT);
-    grad.addColorStop(0,'rgba(255,255,255,0.9)'); grad.addColorStop(0.25,'rgba(255,255,255,0.6)');
-    grad.addColorStop(0.5,'rgba(0,0,0,0.25)'); grad.addColorStop(1,'rgba(0,0,0,0.7)');
-    ctx.globalCompositeOperation='multiply'; ctx.fillStyle=grad;
-    ctx.beginPath(); ctx.arc(cx,cy,LIGHT,0,Math.PI*2); ctx.fill(); ctx.globalCompositeOperation='source-over';
-  } else { ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(0,0,canvas.width,canvas.height); }
-
-  ctx.fillStyle='white'; ctx.font='14px Arial';
-  ctx.fillText(`Level: ${level}`,12,20); ctx.fillText(`Ammo: ${ammo} / ${DIFF[difficulty].maxAmmo}`,12,40);
-  ctx.fillText(`Ghosts: ${ghosts.length}`,12,60);
-}
-
-// ---------- Game Tick ----------
-let lastGhostTick=0, lastBulletTick=0;
-function gameTick(){
-  if(keys['ArrowUp']||keys['w']) tryMove(0,-1);
-  if(keys['ArrowDown']||keys['s']) tryMove(0,1);
-  if(keys['ArrowLeft']||keys['a']) tryMove(-1,0);
-  if(keys['ArrowRight']||keys['d']) tryMove(1,0);
-
-  // ghost move
-  const now=performance.now();
-  ghosts.forEach(g=>{
-    if(g.stunUntil>now) return;
-    if(now-g.lastMove>DIFF[difficulty].ghostSpeed){
-      g.lastMove=now;
-      const next=stepTowards(g.x,g.y,player.x,player.y);
-      g.x=next.x; g.y=next.y;
-    }
-  });
-
-  // bullets
-  if(now-lastBulletTick>16){
-    lastBulletTick=now;
-    bullets.forEach((b,i)=>{
-      // move bullet upward for simplicity
-      b.y-=0.15; 
-      // check collision
-      ghosts.forEach(g=>{
-        const d=Math.abs(g.x-b.x)+Math.abs(g.y-b.y);
-        if(d<1.2){ g.stunUntil=now+1500; const dx=Math.sign(g.x-player.x), dy=Math.sign(g.y-player.y); g.x+=dx; g.y+=dy; bullets.splice(i,1); }
-      });
-    });
-    bullets=bullets.filter(b=>b.y>0);
-  }
-
-  // ammo regen every 30s
-  if(now-lastAmmoRegen>30000){ lastAmmoRegen=now; if(ammo<DIFF[difficulty].maxAmmo) ammo++; updateHUD(); }
-
-  // check win
-  if(player.x===MAP_COLS-2 && player.y===MAP_ROWS-2){ level++; startLevel(); }
-
-  // check lose
-  for(const g of ghosts){ if(Math.round(g.x)===player.x && Math.round(g.y)===player.y){ alert('你被抓到了'); showMenu(); break; } }
-
+function startLevel(){
+  maze=generateMaze(MAP_COLS,MAP_ROWS);
+  spawnEntities();
+  ammo=DIFF[difficulty].maxAmmo;
+  lastAmmoRegen=performance.now();
   updateHUD();
 }
 
-// ---------- Main Loop ----------
-function frameLoop(){ drawFrame(); if(started&&!gameOver) gameTick(); requestAnimationFrame(frameLoop); }
+// ------------------- Loop -------------------
+function frameLoop(){
+  if(started && !gameOver) gameTick();
+  drawFrame();
+  requestAnimationFrame(frameLoop);
+}
 frameLoop();
-
 showMenu();
 </script>
 </body>
 </html>
+
 
 
 

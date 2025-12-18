@@ -4,174 +4,132 @@
     <title>great</title>
     <link rel="icon"href="icon.png.png">
   </head>
-  <body><!DOCTYPE html>
-<html lang="zh-Hant">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>迷跡旅館 Labyrinth Hotel</title>
-<style>
-html,body{
-  margin:0;height:100%;
-  background:#000;
-  overflow:hidden;
-  font-family:Arial,sans-serif;
-}
-canvas{display:block}
-.overlay{
-  position:fixed;inset:0;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  background:rgba(0,0,0,.65);
-  z-index:10;color:#fff;
-}
-.menu{
-  background:#181818;
-  padding:20px;
-  border-radius:10px;
-  text-align:center;
-}
-button{
-  padding:8px 14px;
-  margin:6px;
-  border:none;
-  border-radius:6px;
-  font-weight:700;
-  cursor:pointer;
-}
-.easy{background:#2ecc71}
-.normal{background:#f1c40f}
-.hard{background:#e67e22}
-.hell{background:#e74c3c;color:#fff}
-#hud{
-  position:fixed;
-  top:10px;left:10px;
-  color:#fff;
-  z-index:5;
-  font-weight:bold;
-}
-</style>
-</head>
-
-<body>
-<canvas id="game"></canvas>
-
-<div id="menu" class="overlay">
-  <div class="menu">
-    <h2>迷跡旅館</h2>
-    <p>方向鍵 / WASD 移動<br>空白鍵射擊　F 手電筒</p>
-    <button class="easy" onclick="startGame('EASY')">EASY</button>
-    <button class="normal" onclick="startGame('NORMAL')">NORMAL</button>
-    <button class="hard" onclick="startGame('HARD')">HARD</button>
-    <button class="hell" onclick="startGame('HELL')">HELL</button>
-  </div>
-</div>
-
-<div id="hud" style="display:none"></div>
-
-<script>
-/* ===== Canvas ===== */
+  <body>
+    <script>
+/* ================= 基本設定 ================= */
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
-function resize(){
-  canvas.width = innerWidth;
-  canvas.height = innerHeight;
-}
-addEventListener('resize',resize);
-resize();
+function resize(){canvas.width=innerWidth;canvas.height=innerHeight;}
+addEventListener('resize',resize);resize();
 
-/* ===== Config ===== */
-const TILE = 28;
-const COLS = 40;
-const ROWS = 40;
-
-const DIFF = {
+const TILE=28, COLS=40, ROWS=40;
+const DIFF={
   EASY:{ammo:3,ghost:30},
-  NORMAL:{ammo:5,ghost:18},
-  HARD:{ammo:8,ghost:12},
-  HELL:{ammo:8,ghost:8}
+  NORMAL:{ammo:5,ghost:20},
+  HARD:{ammo:8,ghost:14},
+  HELL:{ammo:8,ghost:9}
 };
 
-/* ===== State ===== */
-let maze=[];
+/* ================= 狀態 ================= */
+let maze=[], bullets=[], ghosts=[];
 let player={x:1,y:1};
-let ghosts=[];
-let started=false;
-let gameOver=false;
-let flashlight=true;
-let difficulty='NORMAL';
-let level=1;
-let ammo=0;
-let lastAmmo=0;
-
-/* ===== Input ===== */
+let started=false, difficulty='NORMAL', level=1;
+let ammo=0, maxAmmo=0, lastAmmoRegen=0;
+const AMMO_REGEN_TIME=30000;
 const keys={};
+
+/* ================= 輸入 ================= */
 addEventListener('keydown',e=>{
   keys[e.key]=true;
-  if(e.key==='f'||e.key==='F') flashlight=!flashlight;
   if(e.key===' ') shoot();
 });
 addEventListener('keyup',e=>keys[e.key]=false);
 
-/* ===== Maze ===== */
+/* ================= 迷宮 ================= */
 function generateMaze(w,h){
   const g=Array.from({length:h},()=>Array(w).fill('W'));
   function carve(x,y){
     g[y][x]='.';
-    const d=[[2,0],[-2,0],[0,2],[0,-2]].sort(()=>Math.random()-0.5);
-    for(const [dx,dy] of d){
-      const nx=x+dx,ny=y+dy;
-      if(nx>0&&ny>0&&nx<w-1&&ny<h-1&&g[ny][nx]==='W'){
-        g[y+dy/2][x+dx/2]='.';
-        carve(nx,ny);
-      }
-    }
+    [[2,0],[-2,0],[0,2],[0,-2]].sort(()=>Math.random()-0.5)
+      .forEach(([dx,dy])=>{
+        const nx=x+dx, ny=y+dy;
+        if(nx>0&&ny>0&&nx<w-1&&ny<h-1&&g[ny][nx]==='W'){
+          g[y+dy/2][x+dx/2]='.'; carve(nx,ny);
+        }
+      });
   }
   carve(1,1);
   g[h-2][w-2]='.';
   return g;
 }
-
 function isWalkable(x,y){
   return x>=0&&y>=0&&x<COLS&&y<ROWS&&maze[y][x]!== 'W';
 }
 
-/* ===== Spawn ===== */
+/* ================= BFS 必經路 ================= */
+function findPath(sx,sy,ex,ey){
+  const q=[{x:sx,y:sy}], prev=Array.from({length:ROWS},()=>Array(COLS).fill(null));
+  const vis=Array.from({length:ROWS},()=>Array(COLS).fill(false));
+  vis[sy][sx]=true;
+  while(q.length){
+    const {x,y}=q.shift();
+    if(x===ex&&y===ey) break;
+    [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dy])=>{
+      const nx=x+dx, ny=y+dy;
+      if(isWalkable(nx,ny)&&!vis[ny][nx]){
+        vis[ny][nx]=true;
+        prev[ny][nx]={x,y};
+        q.push({x:nx,y:ny});
+      }
+    });
+  }
+  const path=[];
+  let cur={x:ex,y:ey};
+  while(cur){path.push(cur);cur=prev[cur.y][cur.x];}
+  return path.reverse();
+}
+
+/* ================= Spawn ================= */
 function spawn(){
   maze=generateMaze(COLS,ROWS);
   player={x:1,y:1};
-  ghosts=[];
-  const base=difficulty==='EASY'?2:difficulty==='NORMAL'?3:difficulty==='HARD'?4:5;
-  for(let i=0;i<base+level-1;i++){
-    let x,y;
-    do{
-      x=Math.floor(Math.random()*COLS);
-      y=Math.floor(Math.random()*ROWS);
-    }while(!isWalkable(x,y)||Math.abs(x-player.x)+Math.abs(y-player.y)<8);
-    ghosts.push({x,y});
+  bullets=[]; ghosts=[];
+  const path=findPath(player.x,player.y,COLS-2,ROWS-2);
+  const base=3+level;
+  const AI=['CHASER','PREDICTOR','FLANKER','WANDERER','ELITE'];
+
+  for(let i=0;i<base;i++){
+    let pos;
+    if(i<base*0.6){
+      const idx=Math.floor(path.length*(0.3+0.5*Math.random()));
+      pos=path[idx];
+    }else{
+      do{
+        pos={x:Math.random()*COLS|0,y:Math.random()*ROWS|0};
+      }while(!isWalkable(pos.x,pos.y));
+    }
+    ghosts.push({
+      x:pos.x,y:pos.y,
+      ai:AI[i%AI.length],
+      knockX:0,knockY:0,knockT:0,stun:0
+    });
   }
-  ammo=DIFF[difficulty].ammo;
-  lastAmmo=performance.now();
+
+  const elite=ghosts.find(g=>g.ai==='ELITE');
+  if(elite){
+    const p=path[path.length-6];
+    elite.x=p.x; elite.y=p.y;
+  }
+
+  maxAmmo=DIFF[difficulty].ammo;
+  ammo=maxAmmo;
+  lastAmmoRegen=performance.now();
 }
 
-/* ===== Shoot ===== */
+/* ================= 射擊 ================= */
 function shoot(){
   if(ammo<=0) return;
   ammo--;
-  for(const g of ghosts){
-    const d=Math.abs(g.x-player.x)+Math.abs(g.y-player.y);
-    if(d<=2){
-      g.x+=Math.sign(g.x-player.x);
-      g.y+=Math.sign(g.y-player.y);
-    }
-  }
+  let dx=0,dy=-1;
+  if(keys.ArrowLeft||keys.a) dx=-1;
+  else if(keys.ArrowRight||keys.d) dx=1;
+  else if(keys.ArrowDown||keys.s) dy=1;
+
+  bullets.push({x:player.x+.5,y:player.y+.5,vx:dx*.4,vy:dy*.4,life:40});
 }
 
-/* ===== Logic ===== */
-let lastMove=0;
-let lastGhost=0;
-
+/* ================= 更新 ================= */
+let lastMove=0,lastGhost=0;
 function update(){
   const now=performance.now();
 
@@ -182,98 +140,111 @@ function update(){
     else if(keys.ArrowRight||keys.d) move(1,0);
   }
 
+  bullets=bullets.filter(b=>{
+    b.x+=b.vx; b.y+=b.vy; b.life--;
+    if(!isWalkable(b.x|0,b.y|0)) return false;
+    for(const g of ghosts){
+      if(Math.abs(g.x-b.x)<.6&&Math.abs(g.y-b.y)<.6){
+        g.knockX=Math.sign(g.x-player.x);
+        g.knockY=Math.sign(g.y-player.y);
+        g.knockT=g.ai==='ELITE'?3:8;
+        g.stun=now+(g.ai==='ELITE'?300:800);
+        return false;
+      }
+    }
+    return b.life>0;
+  });
+
   if(now-lastGhost>DIFF[difficulty].ghost*16){
     lastGhost=now;
     ghosts.forEach(g=>{
-      const dx=Math.sign(player.x-g.x);
-      const dy=Math.sign(player.y-g.y);
+      if(g.knockT>0){
+        const nx=g.x+g.knockX, ny=g.y+g.knockY;
+        if(isWalkable(nx,ny)){g.x=nx;g.y=ny;}
+        g.knockT--; return;
+      }
+      if(g.stun>now) return;
+      const tx=player.x, ty=player.y;
+      const dx=Math.sign(tx-g.x), dy=Math.sign(ty-g.y);
       if(isWalkable(g.x+dx,g.y)) g.x+=dx;
       else if(isWalkable(g.x,g.y+dy)) g.y+=dy;
     });
   }
 
-  if(now-lastAmmo>4000){
-    lastAmmo=now;
-    ammo=Math.min(ammo+1,DIFF[difficulty].ammo);
-  }
-
-  for(const g of ghosts){
-    if(g.x===player.x&&g.y===player.y){
-      alert('你被抓到了！');
-      location.reload();
-    }
+  if(ammo<maxAmmo && now-lastAmmoRegen>AMMO_REGEN_TIME){
+    ammo++; lastAmmoRegen=now;
   }
 
   if(player.x===COLS-2&&player.y===ROWS-2){
-    alert('過關！');
-    level++;
-    spawn();
+    alert('過關！'); level++; spawn();
   }
 }
 
-function move(dx,dy){
-  const nx=player.x+dx,ny=player.y+dy;
-  if(isWalkable(nx,ny)){
-    player.x=nx;player.y=ny;
-    lastMove=performance.now();
-  }
-}
-
-/* ===== Draw ===== */
+/* ================= 繪製 ================= */
 function draw(){
-  ctx.fillStyle='#000';
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
   const camX=player.x*TILE-canvas.width/2;
   const camY=player.y*TILE-canvas.height/2;
 
-  for(let y=0;y<ROWS;y++){
-    for(let x=0;x<COLS;x++){
-      ctx.fillStyle=maze[y][x]==='W'?'#444':'#222';
-      ctx.fillRect(x*TILE-camX,y*TILE-camY,TILE,TILE);
-    }
+  for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
+    ctx.fillStyle=maze[y][x]==='W'?'#444':'#222';
+    ctx.fillRect(x*TILE-camX,y*TILE-camY,TILE,TILE);
   }
 
   ctx.fillStyle='#0ff';
   ctx.fillRect(player.x*TILE-camX,player.y*TILE-camY,TILE,TILE);
 
-  ctx.fillStyle='#e33';
   ghosts.forEach(g=>{
+    const cx=g.x*TILE-camX+TILE/2;
+    const cy=g.y*TILE-camY+TILE/2;
+    if(g.ai==='ELITE'){
+      ctx.strokeStyle='#ff0';
+      ctx.beginPath();
+      ctx.arc(cx,cy,14+Math.sin(performance.now()/200)*2,0,Math.PI*2);
+      ctx.stroke();
+      ctx.fillStyle='#c00';
+    }else{
+      ctx.fillStyle='#e33';
+    }
+    ctx.beginPath(); ctx.arc(cx,cy,10,0,Math.PI*2); ctx.fill();
+  });
+
+  ctx.fillStyle='#fff';
+  bullets.forEach(b=>{
     ctx.beginPath();
-    ctx.arc(g.x*TILE-camX+TILE/2,g.y*TILE-camY+TILE/2,12,0,Math.PI*2);
+    ctx.arc(b.x*TILE-camX,b.y*TILE-camY,3,0,Math.PI*2);
     ctx.fill();
   });
 
-  if(flashlight){
-    ctx.fillStyle='rgba(0,0,0,.5)';
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-  }
-
-  document.getElementById('hud').innerHTML=
-    `Level ${level}<br>Ammo ${ammo}`;
+  ctx.fillStyle='rgba(0,0,0,.65)';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  const cx=player.x*TILE-camX+TILE/2;
+  const cy=player.y*TILE-camY+TILE/2;
+  const grad=ctx.createRadialGradient(cx,cy,50,cx,cy,300);
+  grad.addColorStop(0,'rgba(0,0,0,0)');
+  grad.addColorStop(1,'rgba(0,0,0,1)');
+  ctx.globalCompositeOperation='destination-out';
+  ctx.fillStyle=grad;
+  ctx.beginPath(); ctx.arc(cx,cy,300,0,Math.PI*2); ctx.fill();
+  ctx.globalCompositeOperation='source-over';
 }
 
-/* ===== Loop ===== */
+/* ================= 主迴圈 ================= */
+function move(dx,dy){
+  const nx=player.x+dx, ny=player.y+dy;
+  if(isWalkable(nx,ny)){player.x=nx;player.y=ny; lastMove=performance.now();}
+}
 function loop(){
-  if(started){
-    update();
-    draw();
-  }
+  if(started){update(); draw();}
   requestAnimationFrame(loop);
 }
 loop();
 
-/* ===== Start ===== */
 function startGame(d){
-  difficulty=d;
-  document.getElementById('menu').style.display='none';
-  document.getElementById('hud').style.display='block';
-  started=true;
-  spawn();
+  difficulty=d; started=true; level=1; spawn();
 }
 </script>
-</body>
-</html>
+
 
 
 </html>

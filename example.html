@@ -214,10 +214,23 @@ function gameTick(){
   }
 }
 
-function move(dy,dx){
-  const nx=player.x+dx, ny=player.y+dy;
-  if(maze[ny]?.[nx]==='.') player={x:nx,y:ny};
+function move(dy, dx) {
+  const nx = player.x + dx;
+  const ny = player.y + dy;
+
+  // 明確檢查邊界，避免 undefined
+  if (
+    ny >= 0 &&
+    ny < MAP_ROWS &&
+    nx >= 0 &&
+    nx < MAP_COLS &&
+    maze[ny] &&
+    maze[ny][nx] === '.'
+  ) {
+    player = { x: nx, y: ny };
+  }
 }
+
 
 // ===== Draw =====
 function draw(){

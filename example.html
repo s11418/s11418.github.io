@@ -5,22 +5,25 @@
     <link rel="icon"href="icon.png.png">
   </head>
   <body>
-   <!DOCTYPE html>
+  <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-<meta charset="utf-8">
-<title>Labyrinth Horror</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Labyrinth Hotel — Web</title>
 <style>
-html,body{margin:0;background:#000;overflow:hidden;font-family:Arial,sans-serif}
-canvas{display:block}
-.overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.75);color:#fff;z-index:10}
-.menu{background:#222;padding:20px;border-radius:10px;text-align:center}
-.btn{padding:10px 18px;margin:5px;border:none;border-radius:5px;font-weight:700;cursor:pointer}
-.btn-easy{background:#2ecc71;color:#012}
-.btn-normal{background:#f1c40f;color:#000}
-.btn-hard{background:#e67e22;color:#000}
-.btn-hell{background:#e74c3c;color:#fff}
-#hud{position:fixed;left:10px;top:10px;color:#fff;font-weight:700;z-index:5}
+html,body{height:100%;margin:0;background:#000;font-family:Arial,sans-serif;}
+canvas{display:block;width:100vw;height:100vh;}
+.overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:20;color:#fff;}
+.menu{background:rgba(24,24,24,0.98);padding:18px;border-radius:10px;text-align:center;}
+.btn{padding:8px 14px;margin:6px;border-radius:6px;border:none;cursor:pointer;font-weight:700;}
+.btn-easy{background:#2ecc71;color:#012;}
+.btn-normal{background:#f1c40f;}
+.btn-hard{background:#e67e22;}
+.btn-hell{background:#e74c3c;}
+#hud{position:fixed;left:12px;top:12px;z-index:15;color:#fff;font-weight:700;text-shadow:0 0 6px #000;}
+#hud div{margin-bottom:6px;}
+#infoSmall{font-size:13px;opacity:.9;margin-top:8px;}
 </style>
 </head>
 <body>
@@ -29,245 +32,236 @@ canvas{display:block}
 <div id="menuOverlay" class="overlay">
   <div class="menu">
     <h2>迷跡旅館 — 選擇難度</h2>
-    <div style="margin:10px 0">
+    <div id="controls" style="margin-bottom:8px">控制：方向鍵/WASD 移動，空白鍵射擊，F 切換手電筒</div>
+    <div>
       <button class="btn btn-easy" onclick="startGame('EASY')">EASY</button>
       <button class="btn btn-normal" onclick="startGame('NORMAL')">NORMAL</button>
       <button class="btn btn-hard" onclick="startGame('HARD')">HARD</button>
       <button class="btn btn-hell" onclick="startGame('HELL')">HELL</button>
     </div>
-    <div style="font-size:13px;opacity:0.8">EASY: 3 發 / NORMAL: 5 發 / HARD: 8 發 / HELL: 8 發，4 秒回 1 發</div>
+    <div id="infoSmall">EASY 3 發 / NORMAL 5 發 / HARD 8 發 / HELL 8 發，每 30 秒回 1 發，最多上限</div>
   </div>
 </div>
 
 <div id="hud" style="display:none">
   <div id="levelText">Level: 1</div>
+  <div id="diffText">Difficulty: NORMAL</div>
   <div id="ammoText">Ammo: 0 / 0</div>
   <div id="ghostText">Ghosts: 0</div>
+  <div id="tipText">F: 手電筒切換</div>
 </div>
 
 <script>
-/* ========= Canvas ========= */
 const canvas=document.getElementById("game");
 const ctx=canvas.getContext("2d");
-function resize(){canvas.width=innerWidth;canvas.height=innerHeight}
-addEventListener("resize",resize); resize();
+function resize(){canvas.width=innerWidth;canvas.height=innerHeight;}
+addEventListener("resize",resize);resize();
 
-/* ========= Config ========= */
-const TILE=28, COLS=35, ROWS=35, LIGHT_RADIUS=260;
-const DIFF={
-  "EASY":{maxAmmo:3}, "NORMAL":{maxAmmo:5}, "HARD":{maxAmmo:8}, "HELL":{maxAmmo:8}
-};
+const TILE=28,MAP_COLS=40,MAP_ROWS=40;
+const DIFF={EASY:{maxAmmo:3,ghostSpeed:0.02,numGhosts:3},
+            NORMAL:{maxAmmo:5,ghostSpeed:0.03,numGhosts:4},
+            HARD:{maxAmmo:8,ghostSpeed:0.04,numGhosts:6},
+            HELL:{maxAmmo:8,ghostSpeed:0.05,numGhosts:8}};
 
-/* ========= State ========= */
-let maze=[], ghosts=[], bullets=[];
-let player={x:1,y:1};
-let ammo=0, difficulty="NORMAL", level=1;
-let started=false;
-let lastAmmoTime=0;
+let maze=[],player={x:1,y:1},ghosts=[],bullets=[],level=1,difficulty='NORMAL',started=false,flashlightOn=true,ammo=0,lastAmmoTime=0,gameOver=false;
 
-/* ========= Input ========= */
-const keys={};
-addEventListener("keydown",e=>{
-  keys[e.key]=true;
-  if(e.key===" ") shoot();
-});
-addEventListener("keyup",e=>keys[e.key]=false);
-
-/* ========= HUD / Menu ========= */
 const menuOverlay=document.getElementById("menuOverlay");
 const hud=document.getElementById("hud");
 const levelText=document.getElementById("levelText");
+const diffText=document.getElementById("diffText");
 const ammoText=document.getElementById("ammoText");
 const ghostText=document.getElementById("ghostText");
+
+const keys={};
+addEventListener("keydown",e=>{keys[e.key]=true;if(e.key==="f"||e.key==="F")flashlightOn=!flashlightOn;});
+addEventListener("keyup",e=>keys[e.key]=false);
+
+function generateMaze(cols,rows){
+  const grid=Array.from({length:rows},()=>Array(cols).fill('W'));
+  function carve(x,y){
+    grid[y][x]='.';
+    const dirs=[{x:2,y:0},{x:-2,y:0},{x:0,y:2},{x:0,y:-2}].sort(()=>Math.random()-0.5);
+    for(const d of dirs){
+      const nx=x+d.x,ny=y+d.y;
+      if(nx>0&&ny>0&&nx<cols-1&&ny<rows-1&&grid[ny][nx]==='W'){
+        grid[y+d.y/2][x+d.x/2]='.';
+        carve(nx,ny);
+      }
+    }
+  }
+  carve(1,1);
+  grid[1][1]='.'; grid[rows-2][cols-2]='.';
+  return grid;
+}
+
+function isWalkable(x,y){return y>=0&&y<MAP_ROWS&&x>=0&&x<MAP_COLS&&maze[y][x]==='.';}
+
+function spawn(){
+  maze=generateMaze(MAP_COLS,MAP_ROWS);
+  player={x:1,y:1};
+  bullets=[];
+  ghosts=[];
+
+  const cfg=DIFF[difficulty];
+  const possible=[];
+  for(let y=1;y<MAP_ROWS-1;y++){
+    for(let x=1;x<MAP_COLS-1;x++){
+      if(isWalkable(x,y)&&!(x<=2&&y<=2)&&!(x>=MAP_COLS-3&&y>=MAP_ROWS-3)){
+        possible.push({x,y});
+      }
+    }
+  }
+  for(let i=0;i<cfg.numGhosts;i++){
+    const idx=Math.floor(Math.random()*possible.length);
+    const pos=possible.splice(idx,1)[0];
+    ghosts.push({x:pos.x,y:pos.y,stun:0,speed:cfg.ghostSpeed});
+  }
+
+  ammo=cfg.maxAmmo; lastAmmoTime=performance.now();
+  updateHUD();
+}
+
 function updateHUD(){
   levelText.textContent=`Level: ${level}`;
+  diffText.textContent=`Difficulty: ${difficulty}`;
   ammoText.textContent=`Ammo: ${ammo} / ${DIFF[difficulty].maxAmmo}`;
   ghostText.textContent=`Ghosts: ${ghosts.length}`;
 }
 
-/* ========= Maze ========= */
-function genMaze(w,h){
-  const g=Array.from({length:h},()=>Array(w).fill("W"));
-  function carve(x,y){
-    g[y][x]=".";
-    [[2,0],[-2,0],[0,2],[0,-2]].sort(()=>Math.random()-.5)
-    .forEach(([dx,dy])=>{
-      const nx=x+dx, ny=y+dy;
-      if(nx>0&&ny>0&&nx<w-1&&ny<h-1&&g[ny][nx]==="W"){
-        g[y+dy/2][x+dx/2]=".";
-        carve(nx,ny);
-      }
-    });
-  }
-  carve(1,1);
-  g[h-2][w-2]=".";
-  return g;
-}
-function walk(x,y){return maze[y]&&maze[y][x]==="."}
-
-/* ========= Path ========= */
-function findPath(){
-  const q=[{x:1,y:1}], prev={};
-  prev["1,1"]=null;
-  while(q.length){
-    const p=q.shift();
-    if(p.x===COLS-2&&p.y===ROWS-2) break;
-    [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dy])=>{
-      const nx=p.x+dx, ny=p.y+dy, k=`${nx},${ny}`;
-      if(walk(nx,ny)&&!(k in prev)){ prev[k]=p; q.push({x:nx,y:ny}); }
-    });
-  }
-  const path=[]; let cur={x:COLS-2,y:ROWS-2};
-  while(cur){ path.push(cur); cur=prev[`${cur.x},${cur.y}`]; }
-  return path.reverse();
+function tryShoot(){
+  if(ammo<=0)return;
+  ammo--; updateHUD();
+  const dx=0,dy=-0.5; // 直上簡單子彈
+  bullets.push({x:player.x+0.5,y:player.y+0.5,dx:dx,dy:dy,life:50});
 }
 
-/* ========= Spawn ========= */
-function spawn(){
-  maze=genMaze(COLS,ROWS);
-  player={x:1,y:1};
-  ghosts=[]; bullets=[];
-  const path=findPath();
+addEventListener("keydown",e=>{if(e.key===" ")tryShoot();});
 
-  // 普通鬼
-  for(let i=4;i<path.length;i+=6){
-    ghosts.push({x:path[i].x,y:path[i].y,type:"normal",stun:0});
-  }
-  // 精英鬼
-  const p=path[Math.max(path.length-6,0)];
-  ghosts.push({x:p.x,y:p.y,type:"elite",stun:0});
-
-  ammo=DIFF[difficulty].maxAmmo;
-  lastAmmoTime=performance.now();
-  updateHUD();
+function drawPlayer(){
+  const cx=player.x*TILE,cy=player.y*TILE;
+  ctx.fillStyle="#0ff"; ctx.fillRect(cx,cy,TILE,TILE);
 }
 
-/* ========= Shooting ========= */
-function shoot(){
-  if(ammo<=0) return;
-  ammo--;
-  bullets.push({x:player.x+.5,y:player.y+.5,dx:0,dy:-.4,life:40});
-  updateHUD();
-}
-
-/* ========= Update ========= */
-function update(){
-  // player
-  if(keys.ArrowUp&&walk(player.x,player.y-1))player.y--;
-  if(keys.ArrowDown&&walk(player.x,player.y+1))player.y++;
-  if(keys.ArrowLeft&&walk(player.x-1,player.y))player.x--;
-  if(keys.ArrowRight&&walk(player.x+1,player.y))player.x++;
-
-  // bullets
-  bullets=bullets.filter(b=>{
-    b.x+=b.dx; b.y+=b.dy; b.life--;
-    ghosts.forEach(g=>{
-      if(Math.abs(g.x-b.x)<.6&&Math.abs(g.y-b.y)<.6){
-        g.stun=30;
-        g.x+=Math.sign(g.x-player.x);
-        g.y+=Math.sign(g.y-player.y);
-        b.life=0;
-      }
-    });
-    return b.life>0;
-  });
-
-  // ghosts
+function drawGhosts(){
   ghosts.forEach(g=>{
-    if(g.stun>0){ g.stun--; return; }
-    const dx=Math.sign(player.x-g.x);
-    const dy=Math.sign(player.y-g.y);
-    if(walk(g.x+dx,g.y)) g.x+=dx;
-    else if(walk(g.x,g.y+dy)) g.y+=dy;
-  });
-
-  // ammo regen every 30s if empty
-  if(ammo<DIFF[difficulty].maxAmmo && performance.now()-lastAmmoTime>30000){
-    ammo++; lastAmmoTime=performance.now(); updateHUD();
-  }
-
-  // win
-  if(player.x===COLS-2 && player.y===ROWS-2){
-    level++; startLevel();
-  }
-
-  // lose
-  ghosts.forEach(g=>{
-    if(Math.round(g.x)===player.x && Math.round(g.y)===player.y){
-      alert("你被抓到了！遊戲結束");
-      showMenu();
-    }
+    const sx=g.x*TILE,sy=g.y*TILE;
+    ctx.fillStyle=g.stun>0?"rgba(255,0,0,0.5)":"#e33";
+    ctx.beginPath(); ctx.arc(sx+TILE/2,sy+TILE/2,TILE/2,0,Math.PI*2); ctx.fill();
   });
 }
 
-/* ========= Draw ========= */
-function draw(){
-  ctx.fillStyle="#111";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-  const camX=player.x*TILE-canvas.width/2;
-  const camY=player.y*TILE-canvas.height/2;
-
-  for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
-    ctx.fillStyle=maze[y][x]==="W"?"#444":"#222";
-    ctx.fillRect(x*TILE-camX,y*TILE-camY,TILE,TILE);
-  }
-
-  // exit
-  ctx.fillStyle="#2ecc71";
-  ctx.fillRect((COLS-2)*TILE-camX,(ROWS-2)*TILE-camY,TILE,TILE);
-
-  // player
-  ctx.fillStyle="#0ff";
-  ctx.fillRect(player.x*TILE-camX,player.y*TILE-camY,TILE,TILE);
-
-  // ghosts
-  ghosts.forEach(g=>{
-    ctx.fillStyle=g.type==="elite"?"#ff0":"#e33";
-    ctx.beginPath();
-    ctx.arc(g.x*TILE-camX+14,g.y*TILE-camY+14,12,0,Math.PI*2);
-    ctx.fill();
-  });
-
-  // bullets
-  ctx.fillStyle="#fff";
+function drawBullets(){
+  ctx.fillStyle="#ff0";
   bullets.forEach(b=>{
-    ctx.beginPath();
-    ctx.arc(b.x*TILE-camX,b.y*TILE-camY,3,0,Math.PI*2);
-    ctx.fill();
+    const sx=b.x*TILE,sy=b.y*TILE;
+    ctx.beginPath(); ctx.arc(sx,sy,4,0,Math.PI*2); ctx.fill();
   });
+}
+
+function drawMaze(){
+  for(let y=0;y<MAP_ROWS;y++){
+    for(let x=0;x<MAP_COLS;x++){
+      const ch=maze[y][x],sx=x*TILE,sy=y*TILE;
+      ctx.fillStyle=ch==='W'?"#444":"#222";
+      ctx.fillRect(sx,sy,TILE,TILE);
+    }
+  }
+  //出口
+  ctx.fillStyle="#2ecc71"; ctx.fillRect((MAP_COLS-2)*TILE,(MAP_ROWS-2)*TILE,TILE,TILE);
+}
+
+function drawFrame(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  drawMaze();
+  drawPlayer();
+  drawGhosts();
+  drawBullets();
 
   // 光照
-  ctx.fillStyle="rgba(0,0,0,.7)";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-  const cx=player.x*TILE-camX+14, cy=player.y*TILE-camY+14;
-  const g=ctx.createRadialGradient(cx,cy,50,cx,cy,LIGHT_RADIUS);
-  g.addColorStop(0,"rgba(0,0,0,0)");
-  g.addColorStop(1,"rgba(0,0,0,1)");
-  ctx.globalCompositeOperation="destination-out";
-  ctx.fillStyle=g;
-  ctx.beginPath(); ctx.arc(cx,cy,LIGHT_RADIUS,0,Math.PI*2); ctx.fill();
-  ctx.globalCompositeOperation="source-over";
+  if(flashlightOn){
+    ctx.fillStyle="rgba(0,0,0,0.5)";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    const cx=player.x*TILE+TILE/2,cy=player.y*TILE+TILE/2;
+    const grad=ctx.createRadialGradient(cx,cy,50,cx,cy,300);
+    grad.addColorStop(0,"rgba(255,255,255,0.9)");
+    grad.addColorStop(1,"rgba(0,0,0,0.6)");
+    ctx.globalCompositeOperation="multiply";
+    ctx.fillStyle=grad;
+    ctx.beginPath(); ctx.arc(cx,cy,300,0,Math.PI*2); ctx.fill();
+    ctx.globalCompositeOperation="source-over";
+  }
 }
 
-/* ========= Loop ========= */
-function loop(){ if(started){ update(); draw(); } requestAnimationFrame(loop); }
+let lastMove=0;
+function update(){
+  const now=performance.now();
+  if(!gameOver){
+    // 玩家移動
+    if(keys.ArrowUp&&isWalkable(player.x,player.y-1))player.y-=0.05;
+    if(keys.ArrowDown&&isWalkable(player.x,player.y+1))player.y+=0.05;
+    if(keys.ArrowLeft&&isWalkable(player.x-1,player.y))player.x-=0.05;
+    if(keys.ArrowRight&&isWalkable(player.x+1,player.y))player.x+=0.05;
+
+    // 子彈
+    bullets=bullets.filter(b=>{
+      b.x+=b.dx;b.y+=b.dy;b.life--;
+      ghosts.forEach(g=>{
+        if(g.stun===0&&Math.hypot(g.x-b.x,g.y-b.y)<0.8){
+          g.stun=30; //暈眩
+          const pushX=Math.sign(g.x-player.x)*0.5;
+          const pushY=Math.sign(g.y-player.y)*0.5;
+          g.x+=pushX; g.y+=pushY;
+          b.life=0;
+        }
+      });
+      return b.life>0;
+    });
+
+    // 鬼移動慢速
+    ghosts.forEach(g=>{
+      if(g.stun>0){g.stun--;return;}
+      const dx=player.x-g.x,dy=player.y-g.y;
+      const dist=Math.hypot(dx,dy);
+      if(dist>0){
+        const speed=g.speed;
+        let nx=g.x+(dx/dist)*speed;
+        let ny=g.y+(dy/dist)*speed;
+        if(isWalkable(Math.floor(nx),Math.floor(ny))){g.x=nx;g.y=ny;}
+      }
+    });
+
+    // 補充子彈
+    if(ammo<DIFF[difficulty].maxAmmo && now-lastAmmoTime>30000){ammo++; lastAmmoTime=now; updateHUD();}
+
+    // 判定勝利
+    if(Math.floor(player.x)===MAP_COLS-2 && Math.floor(player.y)===MAP_ROWS-2){
+      level++; spawn(); updateHUD();
+    }
+
+    // 判定失敗
+    ghosts.forEach(g=>{
+      if(Math.floor(g.x)===Math.floor(player.x)&&Math.floor(g.y)===Math.floor(player.y)){
+        alert("你被抓到了！遊戲結束");
+        showMenu();
+      }
+    });
+  }
+}
+
+function showMenu(){started=false; menuOverlay.style.display="flex"; hud.style.display="none"; gameOver=true;}
+function startGame(diff){difficulty=diff;level=1;menuOverlay.style.display="none";hud.style.display="block";started=true;gameOver=false;spawn();updateHUD();}
+
+function loop(){
+  update();
+  drawFrame();
+  requestAnimationFrame(loop);
+}
+showMenu();
 loop();
-
-/* ========= Start / Menu ========= */
-function showMenu(){
-  started=false; menuOverlay.style.display="flex"; hud.style.display="none";
-}
-function startGame(diff){
-  difficulty=diff; level=1;
-  menuOverlay.style.display="none"; hud.style.display="block";
-  started=true;
-  startLevel();
-}
-function startLevel(){ spawn(); updateHUD(); }
-
 </script>
 </body>
 </html>
+
 
 
 
